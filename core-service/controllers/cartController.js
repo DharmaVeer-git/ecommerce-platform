@@ -14,16 +14,21 @@ exports.addToCart = async (req, res) => {
       cart = await Cart.create({ userId, items: [] });
     }
 
-    const existingItem = cart.items.find(item => item.productId.toString() === productId);
+    const existingItem = cart.items.find(
+      item => item.productId.toString() === productId
+    );
+
     if (existingItem) {
       existingItem.quantity += quantity || 1;
+      existingItem.image = product.image;
     } else {
-      cart.items.push({
-        productId: product._id,
-        name: product.name,
-        price: product.price,
-        quantity: quantity || 1
-      });
+     cart.items.push({
+    productId: product._id,
+    name: product.name,
+    price: product.price,
+    image: product.image,
+    quantity: quantity || 1
+});
     }
 
     await cart.save();
