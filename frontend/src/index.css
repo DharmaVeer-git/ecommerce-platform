@@ -945,3 +945,171 @@ body:has(.auth-screen) .navbar {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* SHOPEASY — PREMIUM FINISHING PASS */
+
+/* Deep, consistent cinematic palette */
+.auth-screen {
+  background: #080810;
+  background-image:
+    radial-gradient(ellipse at 12% 35%, #55328b1c, transparent 42%),
+    radial-gradient(ellipse at 85% 80%, #3159a51b, transparent 42%);
+}
+
+.auth-visual {
+  background:
+    radial-gradient(ellipse at 78% 26%, #476be344, transparent 36%),
+    radial-gradient(ellipse at 8% 75%, #8a3fff30, transparent 43%),
+    linear-gradient(145deg, #15111f 0%, #0b0c18 58%, #101124 100%);
+}
+
+/* Slow, elegant ambient lighting */
+.auth-visual::before {
+  opacity: 0.85;
+  animation: authAmbientSpin 36s linear infinite;
+}
+
+.auth-visual::after {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #b7a0ff66,
+    #8ca8ff99,
+    transparent
+  );
+  filter: blur(1px);
+  box-shadow: 0 0 28px #8066ff35;
+  animation: authLightSweep 7s ease-in-out infinite alternate;
+}
+
+/* More refined headline */
+.visual-copy h1 {
+  text-wrap: balance;
+  text-shadow: 0 5px 40px #8d70ff12;
+}
+
+.visual-copy h1 span {
+  background-image: linear-gradient(
+    105deg,
+    #d5c7ff 0%,
+    #a9a4ff 42%,
+    #7da9ff 75%,
+    #c6b5ff 100%
+  );
+  background-size: 200% 100%;
+  animation: authGradientFlow 8s ease-in-out infinite alternate;
+}
+
+/* Refined glass product cards */
+.floating-product {
+  border-color: #c5b6ff25;
+  background: linear-gradient(
+    135deg,
+    #ffffff12,
+    #b7a1ff07 65%,
+    #ffffff04
+  );
+  box-shadow:
+    0 24px 70px #0004,
+    0 0 30px #7860ff0b,
+    inset 0 1px #ffffff20;
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.floating-product:hover {
+  border-color: #b6a0ff65;
+  box-shadow:
+    0 25px 70px #0005,
+    0 0 35px #8765ff1b,
+    inset 0 1px #ffffff30;
+}
+
+/* Dark, premium login panel */
+.auth-panel {
+  background:
+    radial-gradient(ellipse at 50% 36%, #171526 0%, transparent 57%),
+    linear-gradient(155deg, #0d0d16, #090910);
+}
+
+/* Eliminate Chrome's bright autofill colors */
+.auth-screen .field-group input,
+.auth-screen .field-group input:focus {
+  color: #f8f6ff;
+  caret-color: #c2adff;
+  color-scheme: dark;
+}
+
+.auth-screen .field-group input:-webkit-autofill,
+.auth-screen .field-group input:-webkit-autofill:hover,
+.auth-screen .field-group input:-webkit-autofill:focus,
+.auth-screen .field-group input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f8f6ff;
+  caret-color: #c2adff;
+  -webkit-box-shadow: 0 0 0 1000px #151421 inset;
+  box-shadow: 0 0 0 1000px #151421 inset;
+  border: 1px solid #8c76d9;
+  transition: background-color 99999s ease-out;
+}
+
+/* Richer focus state */
+.auth-screen .field-group input:focus {
+  border-color: #a78bfa;
+  background: #171421;
+  box-shadow:
+    0 0 0 3px #a78bfa16,
+    0 0 24px #9470ff12,
+    inset 0 1px #ffffff06;
+}
+
+/* Smooth, polished button response */
+.premium-submit {
+  background: linear-gradient(
+    105deg,
+    #7952dc,
+    #655ee8 52%,
+    #477fe8
+  );
+  box-shadow:
+    0 10px 32px #6b54e42a,
+    inset 0 1px #ffffff32;
+  transition:
+    transform 180ms cubic-bezier(.2,.8,.2,1),
+    box-shadow 180ms ease,
+    filter 180ms ease;
+}
+
+.premium-submit:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 38px #6b54e43d,
+    inset 0 1px #ffffff45;
+}
+
+.premium-submit .submit-arrow {
+  transition: transform 180ms ease;
+}
+
+.premium-submit:hover .submit-arrow {
+  transform: translate(3px, -3px);
+}
+
+/* More natural motion */
+@keyframes authGradientFlow {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+/* Prevent motion from affecting usability */
+@media (prefers-reduced-motion: reduce) {
+  .auth-visual::before,
+  .auth-visual::after,
+  .visual-copy h1 span,
+  .floating-product,
+  .visual-orb,
+  .live-dot {
+    animation: none !important;
+  }
+}
