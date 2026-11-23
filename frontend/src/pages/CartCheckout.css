@@ -1,0 +1,458 @@
+/* ShopEasy — Cart & Checkout (matches the dark 3D products page) */
+.sx-page {
+  --bg: #0b0a12;
+  --surface: #14131f;
+  --surface-2: #1b1a2b;
+  --line: rgba(255, 255, 255, 0.09);
+  --text: #f2f0ff;
+  --muted: #9b98b5;
+  --accent: #7954ff;
+  --accent-soft: #a58aff;
+  --good: #3ddc97;
+  --bad: #ff6b81;
+
+  min-height: calc(100vh - 85px);
+  padding: 48px 24px 96px;
+  color: var(--text);
+  background:
+    radial-gradient(900px 420px at 15% -10%, rgba(121, 84, 255, 0.22), transparent 60%),
+    radial-gradient(700px 380px at 100% 10%, rgba(82, 139, 255, 0.14), transparent 60%),
+    var(--bg);
+}
+
+.sx-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.sx-head {
+  margin-bottom: 32px;
+}
+
+.sx-head h1 {
+  font-size: clamp(30px, 4vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.sx-head p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.sx-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ---------- Panels ---------- */
+.sx-panel {
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 8px 24px;
+}
+
+.sx-panel.pad {
+  padding: 24px;
+}
+
+.sx-panel h2 {
+  font-size: 17px;
+  font-weight: 650;
+  margin-bottom: 16px;
+}
+
+/* ---------- Cart rows ---------- */
+.sx-item {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sx-item:last-child {
+  border-bottom: 0;
+}
+
+.sx-thumb {
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, #2d2560, #17162a);
+  display: grid;
+  place-items: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent-soft);
+}
+
+.sx-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sx-item-name {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.sx-item-meta {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.sx-qty {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sx-item-total {
+  font-size: 18px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* ---------- Summary ---------- */
+.sx-summary {
+  position: sticky;
+  top: 104px;
+}
+
+.sx-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.sx-line strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sx-line .free {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.sx-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.sx-total b {
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Buttons ---------- */
+.sx-btn {
+  width: 100%;
+  margin-top: 22px;
+  padding: 16px 20px;
+  border: 0;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 650;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #8b66ff, #5b3df0);
+  box-shadow: 0 10px 30px rgba(121, 84, 255, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+}
+
+.sx-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 36px rgba(121, 84, 255, 0.5);
+}
+
+.sx-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sx-btn.ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  box-shadow: none;
+  color: var(--text);
+}
+
+.sx-btn.ghost:hover:not(:disabled) {
+  border-color: var(--accent-soft);
+  box-shadow: none;
+}
+
+.sx-btn:focus-visible,
+.sx-method:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 3px;
+}
+
+.sx-note {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- Empty / loading / error ---------- */
+.sx-empty {
+  text-align: center;
+  padding: 72px 24px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 24px;
+}
+
+.sx-empty h2 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.sx-empty p {
+  color: var(--muted);
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.sx-empty .sx-btn {
+  width: auto;
+  padding: 14px 28px;
+}
+
+.sx-skeleton {
+  height: 96px;
+  margin: 20px 0;
+  border-radius: 16px;
+  background: linear-gradient(90deg, #1b1a2b, #25233b, #1b1a2b);
+  background-size: 200% 100%;
+  animation: sx-shimmer 1.4s linear infinite;
+}
+
+@keyframes sx-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.sx-alert {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  background: rgba(255, 107, 129, 0.1);
+  border: 1px solid rgba(255, 107, 129, 0.35);
+  color: #ffc2cb;
+}
+
+/* ---------- Checkout: payment method + progress ---------- */
+.sx-method {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 18px;
+  text-align: left;
+  color: var(--text);
+  font-size: 15px;
+  background: rgba(121, 84, 255, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  cursor: default;
+}
+
+.sx-method .dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 5px solid var(--accent-soft);
+  background: #fff;
+  flex: none;
+}
+
+.sx-method small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sx-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.sx-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+
+.sx-step .mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  flex: none;
+}
+
+.sx-step.active {
+  color: var(--text);
+}
+
+.sx-step.active .mark {
+  border-color: var(--accent-soft);
+  border-top-color: transparent;
+  animation: sx-spin 0.8s linear infinite;
+}
+
+.sx-step.done {
+  color: var(--text);
+}
+
+.sx-step.done .mark {
+  background: var(--good);
+  border-color: var(--good);
+  color: #06281a;
+}
+
+@keyframes sx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Success ---------- */
+.sx-success {
+  max-width: 520px;
+  margin: 40px auto 0;
+  text-align: center;
+  padding: 48px 32px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 28px;
+}
+
+.sx-check {
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(61, 220, 151, 0.12);
+  border: 2px solid var(--good);
+}
+
+.sx-check svg {
+  width: 40px;
+  height: 40px;
+  stroke: var(--good);
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sx-success h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.sx-success p {
+  color: var(--muted);
+}
+
+.sx-receipt {
+  margin: 28px 0 4px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--line);
+  text-align: left;
+  font-size: 14px;
+}
+
+.sx-receipt div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+}
+
+.sx-receipt span:first-child {
+  color: var(--muted);
+}
+
+.sx-receipt span:last-child {
+  font-weight: 600;
+  word-break: break-all;
+  text-align: right;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .sx-grid {
+    grid-template-columns: 1fr;
+  }
+  .sx-summary {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .sx-page {
+    padding: 32px 16px 72px;
+  }
+  .sx-item {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .sx-thumb {
+    width: 72px;
+    height: 72px;
+  }
+  .sx-item-total {
+    grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sx-skeleton,
+  .sx-step.active .mark {
+    animation: none;
+  }
+  .sx-btn {
+    transition: none;
+  }
+}

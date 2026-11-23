@@ -1,9 +1,23 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCart } from '../api';
+import './CartCheckout.css';
+
+const rupee = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+
+function Thumb({ item }) {
+  const src = item.image || item.imageUrl || item.img;
+  return (
+    <div className="sx-thumb">
+      {src ? <img src={src} alt={item.name} /> : (item.name || '?').charAt(0)}
+    </div>
+  );
+}
 
 function Cart() {
   const [cart, setCart] = useState({ items: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
 
@@ -12,234 +26,86 @@ function Cart() {
       navigate('/login');
       return;
     }
-
     getCart(token)
-      .then((res) => setCart(res.data))
-      .catch((err) => {
-        console.error('Failed to load cart:', err);
-      });
-  }, [token, navigate]);
+      .then((res) => setCart(res.data || { items: [] }))
+      .catch(() => setError('We could not load your cart. Check your connection and refresh the page.'))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const total =
-    cart.items?.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    ) || 0;
+  const items = cart.items || [];
+  const count = items.reduce((n, i) => n + i.quantity, 0);
+  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#f5f7fb',
-        padding: '40px 6%',
-      }}
-    >
-      <h2
-        style={{
-          fontSize: '32px',
-          marginBottom: '30px',
-          color: '#17172b',
-        }}
-      >
-        Your Cart
-      </h2>
-
-      {cart.items?.length === 0 ? (
-        <div
-          style={{
-            background: '#fff',
-            padding: '40px',
-            borderRadius: '16px',
-            textAlign: 'center',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
-          }}
-        >
-          <h3>Your cart is empty</h3>
-          <button
-            onClick={() => navigate('/products')}
-            style={{
-              marginTop: '15px',
-              padding: '12px 24px',
-              border: 'none',
-              borderRadius: '8px',
-              background: '#17172b',
-              color: '#fff',
-              cursor: 'pointer',
-              fontWeight: '600',
-            }}
-          >
-            Continue Shopping
-          </button>
+    <div className="sx-page">
+      <div className="sx-wrap">
+        <div className="sx-head">
+          <h1>Your cart</h1>
+          {!loading && items.length > 0 && (
+            <p>
+              {count} {count === 1 ? 'item' : 'items'} ready to order
+            </p>
+          )}
         </div>
-      ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 320px',
-            gap: '25px',
-            alignItems: 'start',
-          }}
-        >
-          {/* Cart Items */}
-          <div>
-            {cart.items.map((item, idx) => (
-              <div
-                key={idx}
-                style={{
-                  background: '#fff',
-                  borderRadius: '16px',
-                  padding: '18px',
-                  marginBottom: '15px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '20px',
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.06)',
-                }}
-              >
-                {/* Product Image */}
-                <div
-                  style={{
-                    width: '120px',
-                    height: '120px',
-                    flexShrink: 0,
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    background: '#f0f0f0',
-                  }}
-                >
-                  <img
-                    src={
-                      item.image ||
-                      'https://placehold.co/300x300?text=Product'
-                    }
-                    alt={item.name}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        'https://placehold.co/300x300?text=Product';
-                    }}
-                  />
-                </div>
 
-                {/* Product Information */}
-                <div style={{ flex: 1 }}>
-                  <h3
-                    style={{
-                      margin: '0 0 8px',
-                      color: '#17172b',
-                      fontSize: '20px',
-                    }}
-                  >
-                    {item.name}
-                  </h3>
-
-                  <p
-                    style={{
-                      margin: '5px 0',
-                      color: '#666',
-                    }}
-                  >
-                    Quantity: {item.quantity}
-                  </p>
-
-                  <p
-                    style={{
-                      margin: '5px 0',
-                      color: '#ff5f5f',
-                      fontWeight: '700',
-                      fontSize: '18px',
-                    }}
-                  >
-                    ₹{item.price}
-                  </p>
-                </div>
-
-                {/* Item Total */}
-                <div
-                  style={{
-                    fontWeight: '700',
-                    fontSize: '19px',
-                    color: '#17172b',
-                  }}
-                >
-                  ₹{item.price * item.quantity}
-                </div>
-              </div>
-            ))}
+        {loading ? (
+          <div className="sx-panel">
+            <div className="sx-skeleton" />
+            <div className="sx-skeleton" />
           </div>
-
-          {/* Order Summary */}
-          <div
-            style={{
-              background: '#fff',
-              borderRadius: '16px',
-              padding: '25px',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.06)',
-              position: 'sticky',
-              top: '20px',
-            }}
-          >
-            <h3
-              style={{
-                marginTop: 0,
-                fontSize: '22px',
-                color: '#17172b',
-              }}
-            >
-              Order Summary
-            </h3>
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                margin: '20px 0',
-                color: '#555',
-              }}
-            >
-              <span>Subtotal</span>
-              <span>₹{total}</span>
-            </div>
-
-            <div
-              style={{
-                borderTop: '1px solid #eee',
-                paddingTop: '15px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontSize: '20px',
-                fontWeight: '700',
-              }}
-            >
-              <span>Total</span>
-              <span>₹{total}</span>
-            </div>
-
-            <button
-              onClick={() => navigate('/checkout')}
-              style={{
-                width: '100%',
-                marginTop: '25px',
-                padding: '14px',
-                border: 'none',
-                borderRadius: '10px',
-                background: '#17172b',
-                color: '#fff',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: 'pointer',
-              }}
-            >
-              Proceed to Checkout
+        ) : error ? (
+          <div className="sx-empty">
+            <h2>Cart unavailable</h2>
+            <p>{error}</p>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="sx-empty">
+            <h2>Your cart is empty</h2>
+            <p>Pick something from the collection and spin it around in 3D first.</p>
+            <button className="sx-btn" onClick={() => navigate('/products')}>
+              Browse products
             </button>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="sx-grid">
+            <div className="sx-panel">
+              {items.map((item, idx) => (
+                <div className="sx-item" key={item._id || item.productId || idx}>
+                  <Thumb item={item} />
+                  <div>
+                    <div className="sx-item-name">{item.name}</div>
+                    <div className="sx-item-meta">{rupee(item.price)} each</div>
+                    <span className="sx-qty">Qty {item.quantity}</span>
+                  </div>
+                  <div className="sx-item-total">{rupee(item.price * item.quantity)}</div>
+                </div>
+              ))}
+            </div>
+
+            <aside className="sx-panel pad sx-summary">
+              <h2>Order summary</h2>
+              <div className="sx-line">
+                <span>Subtotal</span>
+                <strong>{rupee(total)}</strong>
+              </div>
+              <div className="sx-line">
+                <span>Delivery</span>
+                <span className="free">Free</span>
+              </div>
+              <div className="sx-total">
+                <span>Total</span>
+                <b>{rupee(total)}</b>
+              </div>
+              <button className="sx-btn" onClick={() => navigate('/checkout')}>
+                Continue to checkout
+              </button>
+              <button className="sx-btn ghost" onClick={() => navigate('/products')}>
+                Keep shopping
+              </button>
+            </aside>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
