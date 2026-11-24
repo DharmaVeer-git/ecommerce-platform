@@ -11,8 +11,8 @@ class ViewerBoundary extends Component {
     return { failed: true };
   }
   componentDidCatch(err) {
-    console.warn('3D model failed to load, showing photo instead:', err?.message);
-    this.props.onFail?.();
+    console.error('3D viewer error:', err);
+    this.props.onFail?.(err?.message || String(err));
   }
   render() {
     return this.state.failed ? null : this.props.children;
@@ -82,12 +82,15 @@ export default function ProductViewer({ image, images360, model3d, name = 'Produ
   const hasModel = Boolean(model3d);
   const [mode, setMode] = useState(hasModel ? '3d' : 'photo');
   const [failed, setFailed] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [fullscreen, setFullscreen] = useState(false);
   const [autoRotate, setAutoRotate] = useState(true);
+  const [wheelZoom, setWheelZoom] = useState(false); // wheel zoom only after a click, so page scrolling still works
 
   // If the product changes, reset the viewer state
   useEffect(() => {
     setFailed(false);
+    setErrorMsg('');
     setMode(model3d ? '3d' : 'photo');
   }, [model3d]);
 
@@ -118,18 +121,22 @@ export default function ProductViewer({ image, images360, model3d, name = 'Produ
   return (
     <div ref={rootRef} className={`pv-root ${fullscreen ? 'pv-full' : ''}`}>
       <div className="pv-tabs">
-        {hasModel && !failed && (
+        {hasModel && (
           <button
             type="button"
-            className={mode === '3d' ? 'pv-tab active' : 'pv-tab'}
-            onClick={() => setMode('3d')}
+            className={show3D ? 'pv-tab active' : 'pv-tab'}
+            onClick={() => {
+              setFailed(false);
+              setErrorMsg('');
+              setMode('3d');
+            }}
           >
             3D Model
           </button>
         )}
         <button
           type="button"
-          className={mode === 'photo' || !show3D ? 'pv-tab active' : 'pv-tab'}
+          className={!show3D ? 'pv-tab active' : 'pv-tab'}
           onClick={() => setMode('photo')}
         >
           Photo
@@ -138,9 +145,15 @@ export default function ProductViewer({ image, images360, model3d, name = 'Produ
 
       <div className="pv-stage">
         {show3D ? (
-          <ViewerBoundary onFail={() => setFailed(true)}>
+          <div className="pv-canvas-wrap" onPointerLeave={() => setWheelZoom(false)} style={{ position: 'absolute', inset: 0 }}>
+          <ViewerBoundary
+            onFail={(msg) => {
+              setErrorMsg(msg);
+              setFailed(true);
+            }}
+          >
             <Canvas
-              dpr={[1, 2]}
+              dpr={[1, 1.5]}
               camera={{ position: [0, 0.4, 5], fov: 38 }}
               gl={{ antialias: true }}
             >
@@ -162,7 +175,7 @@ export default function ProductViewer({ image, images360, model3d, name = 'Produ
               <OrbitControls
                 ref={controlsRef}
                 makeDefault
-                enableZoom
+                enableZoom={wheelZoom || fullscreen}
                 enablePan={false}
                 enableDamping
                 dampingFactor={0.08}
@@ -170,7 +183,10 @@ export default function ProductViewer({ image, images360, model3d, name = 'Produ
                 autoRotateSpeed={2.2}
                 minDistance={2}
                 maxDistance={9}
-                onStart={() => setAutoRotate(false)}
+                onStart={() => {
+                  setAutoRotate(false);
+                  setWheelZoom(true);
+                }}
               />
             </Canvas>
 
@@ -189,8 +205,9 @@ export default function ProductViewer({ image, images360, model3d, name = 'Produ
                 ⛶
               </button>
             </div>
-            <div className="pv-hint">Drag to rotate · Scroll or +/− to zoom</div>
+            <div className="pv-hint">Drag to rotate · Click, then scroll to zoom</div>
           </ViewerBoundary>
+          </div>
         ) : spinImages ? (
           <>
             <PhotoSpin images={spinImages} name={name} />
@@ -199,6 +216,10 @@ export default function ProductViewer({ image, images360, model3d, name = 'Produ
         ) : (
           <div className="pv-photo">
             <img src={image} alt={name} draggable={false} />
+            
+            {hasModel && failed && (
+              <div className="pv-error">3D preview unavailable. Showing product photo.</div>
+            )}
           </div>
         )}
       </div>

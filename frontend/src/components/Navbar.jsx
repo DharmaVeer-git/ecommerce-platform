@@ -1,26 +1,3 @@
-import { Link, useNavigate } from 'react-router-dom';
-
-function Navbar() {
-  const navigate = useNavigate();
-  const token = localStorage.getItem('token');
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
-  };
-
-  return (
-    <nav className="navbar">
-      <span className="logo">🛍️ ShopEasy</span>
-      <Link to="/products">Products</Link>
-      <Link to="/cart">Cart</Link>
-      {token ? (
-        <button onClick={handleLogout}>Logout</button>
-      ) : (
-        <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
-      )}
-    </nav>
-  );
-}
-
-export default Navbar;
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
+import './Navbar.css';
+export default function Navbar(){const navigate=useNavigate();useLocation();const token=localStorage.getItem('token');return <nav className="navbar se-nav"><Link className="logo" to="/products"><span>S</span> ShopEasy.</Link><NavLink to="/products">Explore</NavLink><NavLink to="/cart">Bag</NavLink>{token?<button onClick={()=>{localStorage.removeItem('token');navigate('/login');}}>Sign out</button>:<NavLink to="/login">Sign in</NavLink>}</nav>}
