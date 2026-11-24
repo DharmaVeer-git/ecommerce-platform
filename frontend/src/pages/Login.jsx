@@ -22,9 +22,11 @@ export default function Login() {
 
   useEffect(() => {
     if (cooldown <= 0) return;
+
     const timer = setTimeout(() => {
       setCooldown(value => Math.max(0, value - 1));
     }, 1000);
+
     return () => clearTimeout(timer);
   }, [cooldown]);
 
@@ -40,6 +42,7 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
     if (loading) return;
 
     setError('');
@@ -61,7 +64,9 @@ export default function Login() {
         }
 
         localStorage.setItem('token', res.data.token);
+
         navigate('/products', { replace: true });
+
         return;
       }
 
@@ -74,7 +79,9 @@ export default function Login() {
           password
         });
       } else if (mode === 'otp') {
-        res = await requestOTP({ email: cleanEmail });
+        res = await requestOTP({
+          email: cleanEmail
+        });
       } else {
         res = await login({
           email: cleanEmail,
@@ -92,6 +99,7 @@ export default function Login() {
       setPassword('');
       setOtp('');
       setCooldown(60);
+
       setNotice(
         mode === 'otp'
           ? 'If your account exists, an OTP will be sent.'
@@ -117,12 +125,18 @@ export default function Login() {
     setNotice('');
 
     try {
-      await requestOTP({ email, challengeId });
+      await requestOTP({
+        email,
+        challengeId
+      });
+
       setOtp('');
       setCooldown(60);
+
       setNotice(
         'If your account exists, a new code will be sent.'
       );
+
     } catch (err) {
       setError(
         err.response?.data?.message ||
@@ -135,22 +149,36 @@ export default function Login() {
 
   return (
     <main className="auth-screen">
+
+      {/* LEFT SIDE VISUAL SECTION */}
+
       <section className="auth-visual">
+
         <div className="visual-grid" />
+
         <div className="visual-orb orb-one" />
+
         <div className="visual-orb orb-two" />
 
         <a className="brand-mark" href="/login">
+
           <span className="brand-symbol">S</span>
+
           <span>
-            SHOPEASY<span className="brand-dot">.</span>
+            SHOPEASY
+            <span className="brand-dot">.</span>
           </span>
+
         </a>
 
         <div className="visual-copy">
+
           <span className="eyebrow">
+
             <span className="live-dot" />
+
             THE ART OF DISCOVERY
+
           </span>
 
           <h1>
@@ -165,50 +193,84 @@ export default function Login() {
           </p>
 
           <div className="visual-stats">
-            <div><strong>01</strong><span>Discover</span></div>
-            <div><strong>02</strong><span>Experience</span></div>
-            <div><strong>03</strong><span>Enjoy</span></div>
+
+            <div>
+              <strong>01</strong>
+              <span>Discover</span>
+            </div>
+
+            <div>
+              <strong>02</strong>
+              <span>Experience</span>
+            </div>
+
+            <div>
+              <strong>03</strong>
+              <span>Enjoy</span>
+            </div>
+
           </div>
+
         </div>
 
         <div className="floating-product product-one">
+
           <span className="product-icon">✳</span>
+
           <div>
             <strong>Find your next favorite.</strong>
             <span>Curated for your lifestyle</span>
           </div>
+
         </div>
 
         <div className="floating-product product-two">
+
           <span className="product-spark">✦</span>
+
           <div>
             <strong>Secure shopping.</strong>
             <span>Verified email authentication</span>
           </div>
+
         </div>
 
-        <span className="visual-index">SHOPEASY / 001</span>
+        <span className="visual-index">
+          SHOPEASY / 001
+        </span>
+
       </section>
 
+      {/* RIGHT SIDE AUTHENTICATION PANEL */}
+
       <section className="auth-panel">
+
         <div className="auth-topline">
+
           <span>YOUR SPACE. YOUR STYLE.</span>
+
           <span>SECURE ACCESS</span>
+
         </div>
 
         <div className="auth-form-wrap">
+
           <div className="form-intro">
+
             <div className="form-icon">
               {stage === 'otp' ? '✓' : '✳'}
             </div>
 
             <p className="form-kicker">
+
               {stage === 'otp'
                 ? 'SECURE VERIFICATION'
                 : 'WELCOME TO SHOPEASY'}
+
             </p>
 
             <h2>
+
               {stage === 'otp'
                 ? 'Verify your email.'
                 : mode === 'signup'
@@ -216,34 +278,56 @@ export default function Login() {
                 : mode === 'otp'
                 ? 'Login with OTP.'
                 : 'Good to see you.'}
+
             </h2>
 
             <p className="form-subtitle">
+
               {stage === 'otp'
                 ? `Enter the six-digit code sent to ${email}`
                 : 'Your premium shopping experience awaits.'}
+
             </p>
+
           </div>
 
+          {/* ERROR MESSAGE */}
+
           {error && (
+
             <div className="auth-error" role="alert">
+
               {error}
+
             </div>
+
           )}
 
+          {/* SUCCESS MESSAGE */}
+
           {notice && (
+
             <div className="auth-notice" role="status">
+
               {notice}
+
             </div>
+
           )}
+
+          {/* AUTHENTICATION FORM */}
 
           <form
             className="premium-form"
             onSubmit={handleSubmit}
           >
+
             {stage === 'otp' ? (
+
               <>
+
                 <label className="field-group">
+
                   <span>VERIFICATION CODE</span>
 
                   <input
@@ -270,54 +354,83 @@ export default function Login() {
                     required
                     autoFocus
                   />
+
                 </label>
 
                 <div className="form-options">
+
                   <span>6-DIGIT CODE</span>
+
                   <span>VALID FOR 5 MINUTES</span>
+
                 </div>
+
               </>
+
             ) : (
+
               <>
+
                 {mode === 'signup' && (
+
                   <label className="field-group">
+
                     <span>FULL NAME</span>
+
                     <input
                       type="text"
                       placeholder="Your name"
                       value={name}
-                      onChange={e => setName(e.target.value)}
+                      onChange={e =>
+                        setName(e.target.value)
+                      }
                       autoComplete="name"
                       required
                     />
+
                   </label>
+
                 )}
 
                 <label className="field-group">
+
                   <span>EMAIL ADDRESS</span>
+
                   <input
                     type="email"
                     placeholder="you@example.com"
                     value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    onChange={e =>
+                      setEmail(e.target.value)
+                    }
                     autoComplete="email"
                     required
                   />
+
                 </label>
 
                 {mode !== 'otp' && (
+
                   <label className="field-group">
+
                     <span>PASSWORD</span>
 
                     <div className="password-wrap">
+
                       <input
-                        type={showPassword ? 'text' : 'password'}
+                        type={
+                          showPassword
+                            ? 'text'
+                            : 'password'
+                        }
                         placeholder="Enter your password"
                         value={password}
                         onChange={e =>
                           setPassword(e.target.value)
                         }
-                        minLength={mode === 'signup' ? 8 : 1}
+                        minLength={
+                          mode === 'signup' ? 8 : 1
+                        }
                         autoComplete={
                           mode === 'signup'
                             ? 'new-password'
@@ -333,13 +446,22 @@ export default function Login() {
                           setShowPassword(!showPassword)
                         }
                       >
+
                         {showPassword ? 'HIDE' : 'SHOW'}
+
                       </button>
+
                     </div>
+
                   </label>
+
                 )}
+
               </>
+
             )}
+
+            {/* MAIN SUBMIT BUTTON */}
 
             <button
               className="premium-submit"
@@ -349,7 +471,9 @@ export default function Login() {
                 (stage === 'otp' && otp.length !== 6)
               }
             >
+
               <span>
+
                 {loading
                   ? 'PLEASE WAIT...'
                   : stage === 'otp'
@@ -357,15 +481,49 @@ export default function Login() {
                   : mode === 'signup'
                   ? 'CREATE ACCOUNT'
                   : 'SEND OTP'}
+
               </span>
 
               <span className="submit-arrow">↗</span>
+
             </button>
+
           </form>
 
           {stage === 'otp' ? (
+
             <>
+
+              {/* NEW SPAM FOLDER NOTIFICATION */}
+
+              <div className="otp-spam-notice">
+
+                <strong>
+                  📩 Didn't receive the OTP?
+                </strong>
+
+                <p>
+                  Please check your Spam or Junk folder.
+                  Sometimes verification emails may be
+                  filtered into these folders.
+                  If you still haven't received the code,
+                  try resending it after 60 seconds.
+                </p>
+
+                <a
+                  href="https://mail.google.com/mail/u/0/#spam"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Check Gmail Spam Folder ↗
+                </a>
+
+              </div>
+
+              {/* RESEND OTP OPTION */}
+
               <div className="auth-switch">
+
                 <span>Didn't receive the code?</span>
 
                 <button
@@ -373,25 +531,41 @@ export default function Login() {
                   onClick={resendOTP}
                   disabled={cooldown > 0 || loading}
                 >
+
                   {cooldown > 0
                     ? `Resend in ${cooldown}s`
                     : 'Resend OTP'}
+
                 </button>
+
               </div>
 
+              {/* BACK TO LOGIN */}
+
               <div className="auth-switch">
+
                 <button
                   type="button"
                   disabled={loading}
                   onClick={() => changeMode('login')}
                 >
+
                   ← Back to login
+
                 </button>
+
               </div>
+
             </>
+
           ) : (
+
             <>
+
+              {/* PASSWORDLESS LOGIN OPTION */}
+
               <div className="auth-switch">
+
                 <button
                   type="button"
                   disabled={loading}
@@ -401,17 +575,25 @@ export default function Login() {
                     )
                   }
                 >
+
                   {mode === 'otp'
                     ? 'Login with password'
                     : 'Login with email OTP'} ↗
+
                 </button>
+
               </div>
 
+              {/* SIGNUP AND LOGIN SWITCH */}
+
               <div className="auth-switch">
+
                 <span>
+
                   {mode === 'signup'
                     ? 'Already have an account?'
                     : 'New to ShopEasy?'}
+
                 </span>
 
                 <button
@@ -423,20 +605,31 @@ export default function Login() {
                     )
                   }
                 >
+
                   {mode === 'signup'
                     ? 'Sign in'
                     : 'Create an account'} ↗
+
                 </button>
+
               </div>
+
             </>
+
           )}
+
         </div>
 
         <footer className="auth-footer">
+
           <span>© 2026 SHOPEASY</span>
+
           <span>SECURE BY DESIGN.</span>
+
         </footer>
+
       </section>
+
     </main>
   );
 }
