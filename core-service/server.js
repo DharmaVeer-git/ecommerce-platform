@@ -1,23 +1,41 @@
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+
 require('dotenv').config();
 
 const productRoutes = require('./routes/productRoutes');
 const cartRoutes = require('./routes/cartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
+// Public and customer APIs
 app.use('/api/products', productRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.log('MongoDB error:', err));
+// Private administrator APIs
+app.use('/api/admin', adminRoutes);
 
+// Database connection
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => console.log(`Core service running on port ${PORT}`));
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('MongoDB connected');
+
+    app.listen(PORT, () => {
+      console.log(`Core service running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('MongoDB connection failed:', err.message);
+    process.exit(1);
+  });

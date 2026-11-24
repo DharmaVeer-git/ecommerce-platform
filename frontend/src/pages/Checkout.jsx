@@ -1,20 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { placeOrder, makePayment, getCart } from '../api';
+import { placeOrder, getCart } from '../api';
 import './CartCheckout.css';
 
-const rupee = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+const rupee = (n) =>
+  `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
-// stage: idle -> order -> payment -> done
+// ================= CHECKOUT STEPS =================
+
 function Steps({ stage }) {
   const steps = [
-    { key: 'order', label: 'Placing your order' },
-    { key: 'payment', label: 'Confirming payment' },
+    {
+      key: 'order',
+      label: 'Placing your order'
+    },
+    {
+      key: 'payment',
+      label: 'Processing demo payment'
+    }
   ];
+
   const order = ['order', 'payment', 'done'];
+
   return (
-    <div className="sx-steps" role="status" aria-live="polite">
+    <div
+      className="sx-steps"
+      role="status"
+      aria-live="polite"
+    >
       {steps.map((s) => {
         const state =
           order.indexOf(stage) > order.indexOf(s.key)
@@ -22,9 +36,16 @@ function Steps({ stage }) {
             : stage === s.key
             ? 'active'
             : '';
+
         return (
-          <div key={s.key} className={`sx-step ${state}`}>
-            <span className="mark">{state === 'done' ? '✓' : ''}</span>
+          <div
+            key={s.key}
+            className={`sx-step ${state}`}
+          >
+            <span className="mark">
+              {state === 'done' ? '✓' : ''}
+            </span>
+
             {s.label}
           </div>
         );
@@ -33,203 +54,473 @@ function Steps({ stage }) {
   );
 }
 
+// ================= CHECKOUT COMPONENT =================
+
 function Checkout() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stage, setStage] = useState('idle');
   const [error, setError] = useState('');
   const [receipt, setReceipt] = useState(null);
+
+  const checkoutLock = useRef(false);
+
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
+
+  // ================= LOAD CART =================
 
   useEffect(() => {
     if (!token) {
       navigate('/login');
       return;
     }
-    getCart(token)
-      .then((res) => setItems(res.data?.items || []))
-      .catch(() => setError('We could not load your cart. Refresh the page and try again.'))
-      .finally(() => setLoading(false));
-  }, []);
 
-  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const busy = stage === 'order' || stage === 'payment';
+    getCart(token)
+      .then((res) => {
+        setItems(res.data?.items || []);
+      })
+      .catch(() => {
+        setError(
+          'We could not load your cart. Refresh the page and try again.'
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [token, navigate]);
+
+  // ================= ORDER TOTAL =================
+
+  const total = items.reduce(
+    (sum, item) =>
+      sum + item.price * item.quantity,
+    0
+  );
+
+  const busy =
+    stage === 'order' ||
+    stage === 'payment';
+
+  // ================= DEMO CHECKOUT =================
 
   const handleCheckout = async () => {
+    if (
+      busy ||
+      checkoutLock.current ||
+      items.length === 0
+    ) {
+      return;
+    }
+
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    checkoutLock.current = true;
+
     setError('');
+
     try {
       setStage('order');
-      const cartRes = await getCart(token);
-      const amount = cartRes.data.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-
-      await placeOrder(token);
 
       setStage('payment');
-      const paymentRes = await makePayment({ amount, method: 'UPI' }, token);
+
+      // Backend validates product prices,
+      // availability and stock before completing
+      // the simulated payment.
+
+      const orderRes = await placeOrder(
+        token,
+        total
+      );
 
       setReceipt({
-        amount,
-        message: paymentRes.data.message,
-        transactionId: paymentRes.data.transactionId,
+        amount: orderRes.data.amount,
+        message: orderRes.data.message,
+        transactionId:
+          orderRes.data.transactionId
       });
+
+      setItems([]);
       setStage('done');
+
     } catch (err) {
       setStage('idle');
+
       setError(
         err.response?.data?.message ||
-          'The payment could not be completed. Nothing was charged. Please try again.'
+        'Unable to confirm your demo order. Refresh your cart before trying again.'
       );
+
+    } finally {
+      checkoutLock.current = false;
     }
   };
 
-  /* ---------- Success ---------- */
+  // ================= SUCCESS SCREEN =================
+
   if (stage === 'done' && receipt) {
     return (
       <div className="sx-page">
+
         <motion.div
           className="sx-success"
-          initial={{ opacity: 0, scale: 0.94, y: 16 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 160, damping: 18 }}
+          initial={{
+            opacity: 0,
+            scale: 0.94,
+            y: 16
+          }}
+          animate={{
+            opacity: 1,
+            scale: 1,
+            y: 0
+          }}
+          transition={{
+            type: 'spring',
+            stiffness: 160,
+            damping: 18
+          }}
         >
+
           <div className="sx-check">
+
             <svg viewBox="0 0 24 24">
+
               <motion.path
                 d="M5 12.5l4.5 4.5L19 7.5"
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ delay: 0.25, duration: 0.5, ease: 'easeOut' }}
+                initial={{
+                  pathLength: 0
+                }}
+                animate={{
+                  pathLength: 1
+                }}
+                transition={{
+                  delay: 0.25,
+                  duration: 0.5,
+                  ease: 'easeOut'
+                }}
               />
+
             </svg>
+
           </div>
-          <h1>Order confirmed</h1>
-          <p>{receipt.message || 'Your payment went through.'}</p>
+
+          <h1>Demo order confirmed</h1>
+
+          <p>
+            {receipt.message ||
+              'Your simulated payment was successful.'}
+          </p>
+
+          <p>
+            No real money has been charged.
+          </p>
 
           <div className="sx-receipt">
+
             <div>
-              <span>Amount paid</span>
-              <span>{rupee(receipt.amount)}</span>
+              <span>Demo payment amount</span>
+              <span>
+                {rupee(receipt.amount)}
+              </span>
             </div>
+
             <div>
               <span>Method</span>
-              <span>UPI</span>
+              <span>Demo UPI</span>
             </div>
+
             {receipt.transactionId && (
               <div>
                 <span>Transaction ID</span>
-                <span>{receipt.transactionId}</span>
+
+                <span>
+                  {receipt.transactionId}
+                </span>
               </div>
             )}
+
           </div>
 
-          <button className="sx-btn" onClick={() => navigate('/products')}>
+          <button
+            className="sx-btn"
+            onClick={() =>
+              navigate('/products')
+            }
+          >
             Continue shopping
           </button>
+
         </motion.div>
+
       </div>
     );
   }
 
-  /* ---------- Checkout ---------- */
+  // ================= CHECKOUT PAGE =================
+
   return (
     <div className="sx-page">
+
       <div className="sx-wrap">
+
         <div className="sx-head">
+
           <h1>Checkout</h1>
-          <p>Review your order and pay securely.</p>
+
+          <p>
+            Review your order and try our demo checkout.
+          </p>
+
         </div>
 
         {loading ? (
+
           <div className="sx-panel">
+
             <div className="sx-skeleton" />
+
             <div className="sx-skeleton" />
+
           </div>
+
         ) : items.length === 0 ? (
+
           <div className="sx-empty">
-            <h2>Nothing to pay for yet</h2>
-            <p>Your cart is empty. Add a product first, then come back here.</p>
-            <button className="sx-btn" onClick={() => navigate('/products')}>
+
+            <h2>
+              {error
+                ? 'Unable to load cart'
+                : 'Nothing to pay for yet'}
+            </h2>
+
+            <p>
+              {error ||
+                'Your cart is empty. Add a product first, then come back here.'}
+            </p>
+
+            <button
+              className="sx-btn"
+              onClick={() =>
+                navigate('/products')
+              }
+            >
               Browse products
             </button>
+
           </div>
+
         ) : (
+
           <div className="sx-grid">
-            <div style={{ display: 'grid', gap: 24 }}>
+
+            <div
+              style={{
+                display: 'grid',
+                gap: 24
+              }}
+            >
+
+              {/* ================= CART ITEMS ================= */}
+
               <div className="sx-panel">
+
                 {items.map((item, idx) => {
-                  const src = item.image || item.imageUrl || item.img;
+
+                  const src =
+                    item.image ||
+                    item.imageUrl ||
+                    item.img;
+
                   return (
-                    <div className="sx-item" key={item._id || item.productId || idx}>
+                    <div
+                      className="sx-item"
+                      key={
+                        item._id ||
+                        item.productId ||
+                        idx
+                      }
+                    >
+
                       <div className="sx-thumb">
-                        {src ? <img src={src} alt={item.name} /> : (item.name || '?').charAt(0)}
+
+                        {src ? (
+                          <img
+                            src={src}
+                            alt={item.name}
+                          />
+                        ) : (
+                          (item.name || '?').charAt(0)
+                        )}
+
                       </div>
+
                       <div>
-                        <div className="sx-item-name">{item.name}</div>
-                        <div className="sx-item-meta">
-                          {rupee(item.price)} × {item.quantity}
+
+                        <div className="sx-item-name">
+                          {item.name}
                         </div>
+
+                        <div className="sx-item-meta">
+                          {rupee(item.price)}
+                          {' × '}
+                          {item.quantity}
+                        </div>
+
                       </div>
-                      <div className="sx-item-total">{rupee(item.price * item.quantity)}</div>
+
+                      <div className="sx-item-total">
+
+                        {rupee(
+                          item.price *
+                          item.quantity
+                        )}
+
+                      </div>
+
                     </div>
                   );
                 })}
+
               </div>
+
+              {/* ================= PAYMENT METHOD ================= */}
 
               <div className="sx-panel pad">
+
                 <h2>Payment method</h2>
-                <div className="sx-method" aria-label="Payment method: UPI">
+
+                <div
+                  className="sx-method"
+                  aria-label="Payment method: Demo UPI"
+                >
+
                   <span className="dot" />
+
                   <span>
-                    UPI
-                    <small>Pay instantly with any UPI app</small>
+
+                    Demo UPI
+
+                    <small>
+                      Simulated payment — no real money charged
+                    </small>
+
                   </span>
+
                 </div>
+
               </div>
+
             </div>
 
+            {/* ================= ORDER SUMMARY ================= */}
+
             <aside className="sx-panel pad sx-summary">
+
               <h2>Order total</h2>
+
               <div className="sx-line">
+
                 <span>Subtotal</span>
-                <strong>{rupee(total)}</strong>
+
+                <strong>
+                  {rupee(total)}
+                </strong>
+
               </div>
+
               <div className="sx-line">
+
                 <span>Delivery</span>
-                <span className="free">Free</span>
+
+                <span className="free">
+                  Free
+                </span>
+
               </div>
+
               <div className="sx-total">
+
                 <span>Total</span>
+
                 <b>{rupee(total)}</b>
+
               </div>
+
+              {/* ================= PROCESSING ================= */}
 
               {busy && (
-                <div style={{ marginTop: 22 }}>
+
+                <div
+                  style={{
+                    marginTop: 22
+                  }}
+                >
+
                   <Steps stage={stage} />
+
                 </div>
+
               )}
+
+              {/* ================= ERROR MESSAGE ================= */}
 
               {error && (
-                <div className="sx-alert" role="alert">
+
+                <div
+                  className="sx-alert"
+                  role="alert"
+                >
+
                   {error}
+
                 </div>
+
               )}
 
-              <button className="sx-btn" onClick={handleCheckout} disabled={busy}>
-                {busy ? 'Processing…' : `Pay ${rupee(total)}`}
+              {/* ================= PAYMENT BUTTON ================= */}
+
+              <button
+                className="sx-btn"
+                onClick={handleCheckout}
+                disabled={busy || total <= 0}
+              >
+
+                {busy
+                  ? 'Processing...'
+                  : `Demo Pay ${rupee(total)}`}
+
               </button>
+
               <button
                 className="sx-btn ghost"
-                onClick={() => navigate('/cart')}
+                onClick={() =>
+                  navigate('/cart')
+                }
                 disabled={busy}
               >
+
                 Back to cart
+
               </button>
-              <p className="sx-note">Please keep this page open until payment finishes.</p>
+
+              <p className="sx-note">
+
+                This is a demonstration checkout.
+                No real money will be transferred.
+
+              </p>
+
             </aside>
+
           </div>
+
         )}
+
       </div>
+
     </div>
   );
 }

@@ -1,8 +1,14 @@
-const express = require('express');
-const router = express.Router();
-const { createProduct, getProducts, getProductById } = require('../controllers/productController');
 
-router.post('/', createProduct);
+const express = require('express');
+
+const router = express.Router();
+
+const {
+  getProducts,
+  getProductById
+} = require('../controllers/productController');
+
+// Public read-only routes
 router.get('/', getProducts);
 router.get('/:id', getProductById);
 
