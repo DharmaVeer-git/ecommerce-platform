@@ -1,37 +1,473 @@
+
 const User = require('../models/User');
+const PendingUser = require('../models/PendingUser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const sendOTP = require('../utils/sendOTP');
+
+const OTP_EXPIRY = 5 * 60 * 1000;
+const RESEND_DELAY = 60 * 1000;
+
+function hashOTP(otp, identifier) {
+  return crypto
+    .createHmac('sha256', process.env.JWT_SECRET)
+    .update(`${identifier}:${otp}`)
+    .digest('hex');
+}
+
+function generateOTP() {
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+function createToken(user) {
+  return jwt.sign(
+    { id: user._id },
+    process.env.JWT_SECRET,
+    { expiresIn: '1d' }
+  );
+}
+
+function normalizeEmail(email) {
+  return typeof email === 'string'
+    ? email.trim().toLowerCase()
+    : '';
+}
+
+function validEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function handleError(res, error) {
+  if (error.code === 11000) {
+    return res.status(409).json({
+      message: 'Account or registration already exists.'
+    });
+  }
+
+  return res.status(error.status || 500).json({
+    message: error.status
+      ? error.message
+      : 'Something went wrong. Please try again.'
+  });
+}
+
+// CREATE PENDING REGISTRATION
 
 exports.signup = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, password } = req.body;
+    const email = normalizeEmail(req.body.email);
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ message: 'User already exists' });
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      !validEmail(email) ||
+      typeof password !== 'string' ||
+      password.length < 8 ||
+      Buffer.byteLength(password, 'utf8') > 72
+    ) {
+      return res.status(400).json({
+        message: 'Enter valid registration details and a password of at least 8 characters.'
+      });
+    }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, password: hashedPassword });
+    if (await User.findOne({ email })) {
+      return res.status(409).json({
+        message: 'Account already exists. Please login.'
+      });
+    }
 
-    res.status(201).json({ message: 'User created', userId: user._id });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    const otp = generateOTP();
+    const challengeId = crypto.randomBytes(32).toString('hex');
+    const passwordHash = await bcrypt.hash(password, 12);
+    const now = new Date();
+
+    const pending = await PendingUser.findOneAndUpdate(
+      {
+        email,
+        $or: [
+          {
+            otpLastSent: {
+              $lte: new Date(Date.now() - RESEND_DELAY)
+            }
+          },
+          {
+            expiresAt: { $lte: now }
+          }
+        ]
+      },
+      {
+        $set: {
+          name: name.trim(),
+          email,
+          password: passwordHash,
+          challengeId,
+          otpHash: hashOTP(otp, challengeId),
+          otpExpires: new Date(Date.now() + OTP_EXPIRY),
+          otpAttempts: 0,
+          otpLastSent: now,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000)
+        }
+      },
+      {
+        upsert: true,
+        new: true
+      }
+    );
+
+    try {
+      await sendOTP(email, otp);
+    } catch {
+      await PendingUser.deleteOne({
+        _id: pending._id,
+        challengeId
+      });
+
+      return res.status(503).json({
+        message: 'Unable to send email. Please try again.'
+      });
+    }
+
+    return res.status(201).json({
+      message: 'Verification code sent.',
+      requiresOTP: true,
+      email,
+      challengeId
+    });
+
+  } catch (error) {
+    return handleError(res, error);
   }
 };
 
+// ISSUE LOGIN OTP
+
+async function issueLoginOTP(user) {
+  const otp = generateOTP();
+  const otpHash = hashOTP(otp, user._id);
+
+  const updated = await User.findOneAndUpdate(
+    {
+      _id: user._id,
+      $or: [
+        { otpLastSent: { $exists: false } },
+        { otpLastSent: null },
+        {
+          otpLastSent: {
+            $lte: new Date(Date.now() - RESEND_DELAY)
+          }
+        }
+      ]
+    },
+    {
+      $set: {
+        otpHash,
+        otpExpires: new Date(Date.now() + OTP_EXPIRY),
+        otpAttempts: 0,
+        otpLastSent: new Date(),
+        otpPurpose: 'login'
+      }
+    }
+  );
+
+  if (!updated) {
+    const error = new Error('Please wait 60 seconds.');
+    error.status = 429;
+    throw error;
+  }
+
+  try {
+    await sendOTP(user.email, otp);
+  } catch {
+    await User.updateOne(
+      { _id: user._id, otpHash },
+      {
+        $unset: {
+          otpHash: 1,
+          otpExpires: 1,
+          otpPurpose: 1
+        }
+      }
+    );
+
+    const error = new Error('Unable to send OTP.');
+    error.status = 503;
+    throw error;
+  }
+}
+
+// PASSWORD LOGIN
+
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const { password } = req.body;
+
+    if (!validEmail(email) || typeof password !== 'string') {
+      return res.status(400).json({
+        message: 'Invalid credentials.'
+      });
+    }
+
+    const user = await User.findOne({
+      email,
+      isVerified: { $ne: false }
+    });
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(400).json({
+        message: 'Invalid credentials.'
+      });
+    }
+
+    await issueLoginOTP(user);
+
+    return res.json({
+      message: 'OTP sent to your email.',
+      requiresOTP: true,
+      email
+    });
+
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// REQUEST OR RESEND OTP
+
+exports.requestOTP = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const { challengeId } = req.body;
+
+    if (!validEmail(email)) {
+      return res.status(400).json({
+        message: 'Enter a valid email.'
+      });
+    }
+
+    // Resend registration OTP
+
+    if (typeof challengeId === 'string' && challengeId) {
+      const otp = generateOTP();
+      const otpHash = hashOTP(otp, challengeId);
+
+      const pending = await PendingUser.findOneAndUpdate(
+        {
+          email,
+          challengeId,
+          expiresAt: { $gt: new Date() },
+          otpLastSent: {
+            $lte: new Date(Date.now() - RESEND_DELAY)
+          }
+        },
+        {
+          $set: {
+            otpHash,
+            otpExpires: new Date(Date.now() + OTP_EXPIRY),
+            otpAttempts: 0,
+            otpLastSent: new Date()
+          }
+        }
+      );
+
+      if (!pending) {
+        return res.status(400).json({
+          message: 'Wait 60 seconds or restart registration.'
+        });
+      }
+
+      try {
+        await sendOTP(email, otp);
+      } catch {
+        return res.status(503).json({
+          message: 'Unable to send OTP. Try again later.'
+        });
+      }
+
+      return res.json({
+        message: 'New verification code sent.',
+        requiresOTP: true
+      });
+    }
+
+    // Passwordless login
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+    if (user) {
+      try {
+        await issueLoginOTP(user);
+      } catch (error) {
+        if (error.status !== 429 && error.status !== 503) {
+          throw error;
+        }
+      }
+    }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    return res.json({
+      message: 'If your account exists, an OTP will be sent.',
+      requiresOTP: true
+    });
 
-    res.status(200).json({ message: 'Login successful', token });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// VERIFY REGISTRATION OTP
+
+async function verifyRegistration(email, otp, challengeId, res) {
+  const filter = {
+    email,
+    challengeId,
+    otpExpires: { $gt: new Date() },
+    expiresAt: { $gt: new Date() },
+    otpAttempts: { $lt: 5 }
+  };
+
+  const pending = await PendingUser.findOne(filter)
+    .select('+otpHash');
+
+  if (!pending) {
+    return res.status(400).json({
+      message: 'Invalid or expired registration. Request a new OTP.'
+    });
+  }
+
+  const submittedHash = hashOTP(otp, challengeId);
+
+  if (submittedHash !== pending.otpHash) {
+    await PendingUser.updateOne(
+      { ...filter, otpHash: pending.otpHash },
+      { $inc: { otpAttempts: 1 } }
+    );
+
+    return res.status(400).json({
+      message: 'Incorrect OTP.'
+    });
+  }
+
+  const verified = await PendingUser.findOneAndDelete({
+    ...filter,
+    otpHash: submittedHash
+  });
+
+  if (!verified) {
+    return res.status(400).json({
+      message: 'OTP expired or already used.'
+    });
+  }
+
+  // Create permanent account only after verification
+
+  const user = await User.create({
+    name: verified.name,
+    email: verified.email,
+    password: verified.password,
+    isVerified: true
+  });
+
+  return res.json({
+    message: 'Account verified successfully.',
+    token: createToken(user)
+  });
+}
+
+// VERIFY LOGIN OR REGISTRATION OTP
+
+exports.verifyOTP = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const { otp, challengeId } = req.body;
+
+    if (
+      !validEmail(email) ||
+      typeof otp !== 'string' ||
+      !/^\d{6}$/.test(otp)
+    ) {
+      return res.status(400).json({
+        message: 'Enter a valid six-digit OTP.'
+      });
+    }
+
+    if (typeof challengeId === 'string' && challengeId) {
+      return await verifyRegistration(
+        email,
+        otp,
+        challengeId,
+        res
+      );
+    }
+
+    const user = await User.findOne({
+      email,
+      isVerified: { $ne: false }
+    }).select('+otpHash');
+
+    if (
+      !user ||
+      !user.otpHash ||
+      !user.otpExpires ||
+      user.otpExpires <= new Date() ||
+      user.otpAttempts >= 5 ||
+      user.otpPurpose !== 'login'
+    ) {
+      return res.status(400).json({
+        message: 'Invalid or expired OTP.'
+      });
+    }
+
+    const submittedHash = hashOTP(otp, user._id);
+
+    const filter = {
+      _id: user._id,
+      otpHash: user.otpHash,
+      otpPurpose: 'login',
+      otpExpires: { $gt: new Date() },
+      otpAttempts: { $lt: 5 }
+    };
+
+    if (submittedHash !== user.otpHash) {
+      await User.updateOne(
+        filter,
+        { $inc: { otpAttempts: 1 } }
+      );
+
+      return res.status(400).json({
+        message: 'Incorrect OTP.'
+      });
+    }
+
+    const verifiedUser = await User.findOneAndUpdate(
+      filter,
+      {
+        $set: {
+          isVerified: true,
+          otpAttempts: 0
+        },
+        $unset: {
+          otpHash: 1,
+          otpExpires: 1,
+          otpPurpose: 1
+        }
+      },
+      { new: true }
+    );
+
+    if (!verifiedUser) {
+      return res.status(400).json({
+        message: 'OTP expired or already used.'
+      });
+    }
+
+    return res.json({
+      message: 'Login successful.',
+      token: createToken(verifiedUser)
+    });
+
+  } catch (error) {
+    return handleError(res, error);
   }
 };
