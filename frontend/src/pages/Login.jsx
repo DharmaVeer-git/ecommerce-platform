@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { login, signup, requestOTP, verifyOTP } from '../api';
 import '../index.css';
 
@@ -494,7 +493,7 @@ export default function Login() {
 
             <>
 
-              {/* NEW SPAM FOLDER NOTIFICATION */}
+              {/* SPAM FOLDER NOTIFICATION */}
 
               <div className="otp-spam-notice">
 
@@ -613,6 +612,69 @@ export default function Login() {
                 </button>
 
               </div>
+
+              {/* ================= ADMIN LOGIN ================= */}
+
+              {mode === 'login' && (
+
+                <div className="admin-access-section">
+
+                  <div className="admin-access-divider">
+
+                    <span />
+
+                    <small>MANAGEMENT PORTAL</small>
+
+                    <span />
+
+                  </div>
+
+                  <Link
+                    to="/admin"
+                    className="admin-access-link"
+                  >
+
+                    <div className="admin-access-icon">
+
+                      <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+
+                        <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z" />
+
+                        <path d="m9 12 2 2 4-4" />
+
+                      </svg>
+
+                    </div>
+
+                    <div className="admin-access-text">
+
+                      <strong>Admin Login</strong>
+
+                      <small>
+                        Authorized administrators only
+                      </small>
+
+                    </div>
+
+                    <span className="admin-access-arrow">
+                      ↗
+                    </span>
+
+                  </Link>
+
+                </div>
+
+              )}
 
             </>
 
