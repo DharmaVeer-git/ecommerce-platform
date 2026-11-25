@@ -1,3 +1,4 @@
+
 import {
   useEffect,
   useState,
@@ -8,12 +9,16 @@ import {
 
 import {
   Link,
-  useNavigate
+  useNavigate,
+  useSearchParams
 } from 'react-router-dom';
 
 import {
   getProducts,
-  addToCart
+  addToCart,
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist
 } from '../api';
 
 import VoiceSearch from '../components/VoiceSearch';
@@ -56,15 +61,39 @@ const model = p => {
 // ==========================================
 
 const category = p => {
-  if (p.category && p.category !== 'General') {
-    return p.category;
+
+  const raw = String(p.category || '').trim();
+
+  const normalized = raw.toLowerCase();
+
+  const aliases = {
+    electronics: 'Electronics',
+    tech: 'Electronics',
+    technology: 'Electronics',
+    fashion: 'Fashion',
+    footwear: 'Fashion',
+    clothing: 'Fashion',
+    accessories: 'Accessories',
+    accessory: 'Accessories'
+  };
+
+  if (aliases[normalized]) {
+    return aliases[normalized];
   }
 
-  return /headphone|speaker|watch/i.test(p.name)
-    ? 'Tech'
-    : /shoe/i.test(p.name)
-      ? 'Footwear'
-      : 'Accessories';
+  if (raw && normalized !== 'general') {
+    return raw;
+  }
+
+  if (/headphone|speaker|watch|earphone|mobile|laptop/i.test(p.name)) {
+    return 'Electronics';
+  }
+
+  if (/shoe|sunglass|shirt|clothing|sneaker/i.test(p.name)) {
+    return 'Fashion';
+  }
+
+  return 'Accessories';
 };
 
 // ==========================================
@@ -126,6 +155,7 @@ const searchAliases = {
 };
 
 function matchesProduct(p, query) {
+
   const searchWords = normalize(query)
     .split(/\s+/)
     .filter(word => word && !stopWords.has(word))
@@ -141,6 +171,7 @@ function matchesProduct(p, query) {
   const compactText = searchableText.replace(/\s/g, '');
 
   return searchWords.every(word => {
+
     const singular =
       word.length > 3
         ? word.replace(/s$/, '')
@@ -150,6 +181,7 @@ function matchesProduct(p, query) {
       compactText.includes(word) ||
       compactText.includes(singular)
     );
+
   });
 }
 
@@ -158,6 +190,7 @@ function matchesProduct(p, query) {
 // ==========================================
 
 function Photo({ p, eager = false }) {
+
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -165,16 +198,20 @@ function Photo({ p, eager = false }) {
   }, [p.image]);
 
   return p.image && !failed ? (
+
     <img
       src={p.image}
       alt={p.name}
       loading={eager ? 'eager' : 'lazy'}
       onError={() => setFailed(true)}
     />
+
   ) : (
+
     <span className="se-placeholder">
       {p.name}
     </span>
+
   );
 }
 
@@ -182,31 +219,46 @@ function Photo({ p, eager = false }) {
 // PRODUCT DETAILS AND INTERACTIVE 3D VIEWER
 // ==========================================
 
-function Details({ p, close, add, busy }) {
+function Details({
+  p,
+  close,
+  add,
+  busy,
+  saved,
+  toggleWishlist,
+  wishlistDisabled
+}) {
+
   const dialog = useRef(null);
 
   useEffect(() => {
+
     const d = dialog.current;
 
     d.showModal();
 
     return () => d.close();
+
   }, []);
 
   return (
+
     <dialog
       ref={dialog}
       className="se-dialog"
+
       onCancel={e => {
         e.preventDefault();
         close();
       }}
+
       onClick={e => {
         if (e.target === dialog.current) {
           close();
         }
       }}
     >
+
       <div className="se-detail">
 
         <button
@@ -224,12 +276,14 @@ function Details({ p, close, add, busy }) {
               <p>Loading interactive viewer…</p>
             }
           >
+
             <ProductViewer
               image={p.image}
               images360={p.images360}
               model3d={model(p)}
               name={p.name}
             />
+
           </Suspense>
 
         </div>
@@ -243,9 +297,11 @@ function Details({ p, close, add, busy }) {
           <h2>{p.name}</h2>
 
           {p.brand && (
+
             <span className="se-kicker">
               Brand: {p.brand}
             </span>
+
           )}
 
           <p>{p.description}</p>
@@ -260,6 +316,39 @@ function Details({ p, close, add, busy }) {
             {busy ? 'Adding…' : 'Add to bag'}
           </button>
 
+          {/* WISHLIST BUTTON INSIDE PRODUCT DETAILS */}
+
+          <button
+            type="button"
+            disabled={wishlistDisabled}
+            aria-pressed={saved}
+            onClick={() => toggleWishlist(p)}
+            style={{
+              padding: '13px 18px',
+              borderRadius: '10px',
+              border: '1px solid #f472b680',
+              background: saved
+                ? '#321c35'
+                : '#ffffff06',
+              color: '#f472b6',
+              fontWeight: '600',
+              cursor: wishlistDisabled
+                ? 'not-allowed'
+                : 'pointer',
+              opacity: wishlistDisabled ? 0.6 : 1
+            }}
+          >
+
+            {saved
+              ? '♥ Remove from Wishlist'
+              : '♡ Save to Wishlist'}
+
+          </button>
+
+          <Link to="/wishlist">
+            View my wishlist →
+          </Link>
+
           <Link to="/cart">
             View shopping bag →
           </Link>
@@ -267,7 +356,9 @@ function Details({ p, close, add, busy }) {
         </div>
 
       </div>
+
     </dialog>
+
   );
 }
 
@@ -282,7 +373,36 @@ export default function Products() {
   const [error, setError] = useState('');
 
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState('All');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const filter = searchParams.get('category') || 'All';
+
+  function setFilter(value) {
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+
+      if (value === 'All') {
+        next.delete('category');
+      } else {
+        next.set('category', value);
+      }
+
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (filter !== 'All') {
+      setQuery('');
+
+      document
+        .getElementById('collection')
+        ?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+    }
+  }, [filter]);
   const [sort, setSort] = useState('featured');
 
   const [selected, setSelected] = useState(null);
@@ -294,10 +414,223 @@ export default function Products() {
   const lock = useRef(false);
 
   // ========================================
+  // CUSTOMER WISHLIST STATE
+  // ========================================
+
+  const [wishlistIds, setWishlistIds] = useState([]);
+  const [wishlistBusy, setWishlistBusy] = useState(false);
+  const [wishlistNotice, setWishlistNotice] = useState('');
+  const [wishlistReady, setWishlistReady] = useState(false);
+  const [wishlistRetry, setWishlistRetry] = useState(0);
+  const [wishlistOwner, setWishlistOwner] = useState(null);
+
+  const wishlistLock = useRef(false);
+
+  const wishlistToken = localStorage.getItem('token');
+
+  const wishlistAvailable =
+    wishlistReady &&
+    wishlistOwner === wishlistToken;
+
+  const wishlistDisabled =
+    wishlistBusy ||
+    (!!wishlistToken && !wishlistAvailable);
+
+  function isSaved(product) {
+
+    const productId = product._id || product.id;
+
+    return (
+      wishlistAvailable &&
+      wishlistIds.includes(String(productId))
+    );
+
+  }
+
+  // ========================================
+  // FETCH CUSTOMER WISHLIST FROM MONGODB
+  // ========================================
+
+  useEffect(() => {
+
+    let active = true;
+
+    setWishlistIds([]);
+    setWishlistReady(false);
+    setWishlistOwner(null);
+    setWishlistNotice('');
+
+    if (!wishlistToken) return;
+
+    async function loadWishlist() {
+
+      try {
+
+        const res = await getWishlist(wishlistToken);
+
+        if (!Array.isArray(res.data)) {
+          throw new Error('Invalid wishlist response.');
+        }
+
+        if (
+          active &&
+          localStorage.getItem('token') === wishlistToken
+        ) {
+
+          setWishlistIds(
+            res.data.map(product => String(product._id))
+          );
+
+          setWishlistOwner(wishlistToken);
+          setWishlistReady(true);
+
+        }
+
+      } catch (err) {
+
+        if (!active) return;
+
+        setWishlistNotice(
+          err.response?.status === 401
+            ? 'Your session has expired. Please sign in again.'
+            : 'Unable to load your saved favourites.'
+        );
+
+      }
+
+    }
+
+    loadWishlist();
+
+    return () => {
+      active = false;
+    };
+
+  }, [wishlistToken, wishlistRetry]);
+
+  // ========================================
+  // ADD OR REMOVE PRODUCT FROM WISHLIST
+  // ========================================
+
+  async function toggleWishlist(product) {
+
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+
+      navigate('/login');
+
+      return;
+
+    }
+
+    if (
+      wishlistLock.current ||
+      !wishlistAvailable ||
+      token !== wishlistOwner
+    ) {
+      return;
+    }
+
+    const id = product._id || product.id;
+
+    if (!id) {
+
+      setWishlistNotice('Product unavailable.');
+
+      return;
+
+    }
+
+    const productId = String(id);
+
+    const alreadySaved =
+      wishlistIds.includes(productId);
+
+    wishlistLock.current = true;
+
+    setWishlistBusy(true);
+    setWishlistNotice('');
+
+    try {
+
+      if (alreadySaved) {
+
+        await removeFromWishlist(
+          productId,
+          token
+        );
+
+        if (localStorage.getItem('token') !== token) {
+          return;
+        }
+
+        setWishlistIds(previous =>
+          previous.filter(id => id !== productId)
+        );
+
+        setWishlistNotice(
+          `${product.name} removed from wishlist.`
+        );
+
+      } else {
+
+        await addToWishlist(
+          productId,
+          token
+        );
+
+        if (localStorage.getItem('token') !== token) {
+          return;
+        }
+
+        setWishlistIds(previous => [
+          ...new Set([...previous, productId])
+        ]);
+
+        setWishlistNotice(
+          `${product.name} saved to wishlist.`
+        );
+
+      }
+
+    } catch (err) {
+
+      if (localStorage.getItem('token') !== token) {
+        return;
+      }
+
+      if (err.response?.status === 401) {
+
+        localStorage.removeItem('token');
+
+        navigate('/login', { replace: true });
+
+        return;
+
+      }
+
+      setWishlistNotice(
+        err.response?.data?.message ||
+        'Unable to update wishlist. Please try again.'
+      );
+
+    } finally {
+
+      wishlistLock.current = false;
+
+      setWishlistBusy(false);
+
+    }
+
+  }
+
+  // ========================================
   // TEXT AND VOICE SEARCH HANDLER
   // ========================================
 
   function handleSearch(text) {
+
     setQuery(String(text || '').trim());
     setFilter('All');
 
@@ -307,16 +640,21 @@ export default function Products() {
         behavior: 'smooth',
         block: 'start'
       });
+
   }
 
   function handleQueryChange(text) {
+
     setQuery(text);
     setFilter('All');
+
   }
 
   function clearSearch() {
+
     setQuery('');
     setFilter('All');
+
   }
 
   // ========================================
@@ -324,6 +662,7 @@ export default function Products() {
   // ========================================
 
   useEffect(() => {
+
     let active = true;
 
     setLoading(true);
@@ -337,44 +676,55 @@ export default function Products() {
           : r.data?.products;
 
         if (!Array.isArray(list)) {
+
           throw Error('Unexpected product response');
+
         }
 
         if (active) {
+
           setProducts(
             list.filter(p => p.isActive !== false)
           );
+
         }
 
       })
       .catch(() => {
 
         if (active) {
+
           setError(
             'Could not load the collection. Please try again.'
           );
+
         }
 
       })
       .finally(() => {
 
         if (active) {
+
           setLoading(false);
+
         }
 
       });
 
     return () => {
+
       active = false;
+
     };
 
   }, [retry]);
 
   // ========================================
-  // AUTOMATICALLY DISMISS NOTIFICATIONS
+  // AUTOMATICALLY DISMISS CART NOTIFICATIONS
   // ========================================
 
   useEffect(() => {
+
     if (!notice) return;
 
     const t = setTimeout(
@@ -387,6 +737,25 @@ export default function Products() {
   }, [notice]);
 
   // ========================================
+  // AUTOMATICALLY DISMISS WISHLIST NOTIFICATIONS
+  // ========================================
+
+  useEffect(() => {
+
+    if (!wishlistNotice || !wishlistAvailable) {
+      return;
+    }
+
+    const t = setTimeout(
+      () => setWishlistNotice(''),
+      5000
+    );
+
+    return () => clearTimeout(t);
+
+  }, [wishlistNotice, wishlistAvailable]);
+
+  // ========================================
   // ADD PRODUCT TO SHOPPING CART
   // ========================================
 
@@ -395,8 +764,11 @@ export default function Products() {
     const token = localStorage.getItem('token');
 
     if (!token) {
+
       navigate('/login');
+
       return;
+
     }
 
     if (lock.current) return;
@@ -404,8 +776,11 @@ export default function Products() {
     const productId = p._id || p.id;
 
     if (!productId) {
+
       setNotice('Product unavailable.');
+
       return;
+
     }
 
     lock.current = true;
@@ -438,6 +813,7 @@ export default function Products() {
       setBusy(false);
 
     }
+
   }
 
   // ========================================
@@ -449,6 +825,7 @@ export default function Products() {
     ...new Set(
       products
         .map(category)
+        .concat(['Electronics', 'Fashion', 'Accessories'])
         .filter(c => c !== 'All')
     )
   ];
@@ -457,17 +834,7 @@ export default function Products() {
   // RESET INVALID CATEGORY FILTER
   // ========================================
 
-  useEffect(() => {
 
-    if (
-      !loading &&
-      filter !== 'All' &&
-      !products.some(p => category(p) === filter)
-    ) {
-      setFilter('All');
-    }
-
-  }, [products, filter, loading]);
 
   // ========================================
   // SMART SEARCH, FILTER AND SORT
@@ -504,6 +871,7 @@ export default function Products() {
   // ========================================
 
   return (
+
     <main className="se-store">
 
       <div className="se-shell">
@@ -527,27 +895,38 @@ export default function Products() {
             </span>
 
             <h1>
+
               Everyday essentials.
+
               <br />
-              <em>Extraordinary perspective.</em>
+
+              <em>
+                Extraordinary perspective.
+              </em>
+
             </h1>
 
             <p>
+
               Discover thoughtfully selected technology
               and lifestyle accessories. Get closer to
               every detail with interactive 3D.
+
             </p>
 
             <a
               className="se-primary"
               href="#collection"
             >
+
               Explore collection ↗
+
             </a>
 
           </div>
 
           {featured && (
+
             <button
               className="se-feature"
               onClick={() => setSelected(featured)}
@@ -560,10 +939,13 @@ export default function Products() {
               />
 
               <span>
+
                 FEATURED / {featured.name} <b>↗</b>
+
               </span>
 
             </button>
+
           )}
 
         </section>
@@ -598,27 +980,82 @@ export default function Products() {
             <div>
 
               <span className="se-kicker">
+
                 {query.trim()
                   ? 'SEARCH RESULTS'
                   : 'THE EDIT'}
+
               </span>
 
               <h2>
+
                 {query.trim()
                   ? 'Find your matching products.'
-                  : 'Find your next favourite.'}
+                  : filter !== 'All'
+                    ? `${filter} Collection.`
+                    : 'Find your next favourite.'}
+
               </h2>
 
             </div>
 
             <span>
+
               {visible.length}{' '}
+
               {visible.length === 1
                 ? 'product'
                 : 'products'}
+
             </span>
 
           </div>
+
+          {/* CUSTOMER WISHLIST SHORTCUT */}
+
+          {wishlistToken && wishlistAvailable && (
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                marginBottom: '18px'
+              }}
+            >
+
+              <Link
+                to="/wishlist"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: '#211d35',
+                  color: '#e4dcff',
+                  border: '1px solid #c1afff35',
+                  padding: '10px 16px',
+                  borderRadius: '10px',
+                  textDecoration: 'none',
+                  fontSize: '13px',
+                  fontWeight: '600'
+                }}
+              >
+
+                <span
+                  style={{
+                    color: '#f472b6',
+                    fontSize: '20px'
+                  }}
+                >
+                  ♥
+                </span>
+
+                My Wishlist ({wishlistIds.length})
+
+              </Link>
+
+            </div>
+
+          )}
 
           {/* ACTIVE SEARCH INFORMATION */}
 
@@ -647,7 +1084,9 @@ export default function Products() {
                   minWidth: 0
                 }}
               >
+
                 Showing results for: "{query}"
+
               </span>
 
               <button
@@ -661,7 +1100,9 @@ export default function Products() {
                   padding: '8px 14px'
                 }}
               >
+
                 Clear search ×
+
               </button>
 
             </div>
@@ -681,7 +1122,9 @@ export default function Products() {
                   aria-pressed={filter === c}
                   onClick={() => setFilter(c)}
                 >
+
                   {c}
+
                 </button>
 
               ))}
@@ -717,10 +1160,12 @@ export default function Products() {
             <div className="se-grid">
 
               {[1, 2, 3].map(i => (
+
                 <div
                   key={i}
                   className="se-skeleton"
                 />
+
               ))}
 
             </div>
@@ -736,7 +1181,9 @@ export default function Products() {
               <button
                 onClick={() => setRetry(x => x + 1)}
               >
+
                 Retry
+
               </button>
 
             </div>
@@ -755,9 +1202,11 @@ export default function Products() {
                   marginTop: '12px'
                 }}
               >
+
                 {query.trim()
                   ? `We couldn't find products matching "${query}".`
                   : 'No products are available in this category.'}
+
               </p>
 
               <p
@@ -766,11 +1215,15 @@ export default function Products() {
                   marginTop: '8px'
                 }}
               >
+
                 Try another product name or use voice search again.
+
               </p>
 
               <button onClick={clearSearch}>
+
                 Clear filters
+
               </button>
 
             </div>
@@ -788,6 +1241,36 @@ export default function Products() {
                   key={p._id || p.id || p.name}
                 >
 
+                  {/* WISHLIST HEART BUTTON */}
+
+                  <button
+                    type="button"
+                    className={
+                      isSaved(p)
+                        ? 'se-wishlist-heart saved'
+                        : 'se-wishlist-heart'
+                    }
+                    disabled={wishlistDisabled}
+                    aria-label={
+                      isSaved(p)
+                        ? `Remove ${p.name} from wishlist`
+                        : `Save ${p.name} to wishlist`
+                    }
+                    aria-pressed={isSaved(p)}
+                    title={
+                      isSaved(p)
+                        ? 'Remove from wishlist'
+                        : 'Add to wishlist'
+                    }
+                    onClick={() => toggleWishlist(p)}
+                  >
+
+                    {isSaved(p) ? '♥' : '♡'}
+
+                  </button>
+
+                  {/* PRODUCT IMAGE */}
+
                   <button
                     className="se-photo"
                     onClick={() => setSelected(p)}
@@ -796,12 +1279,16 @@ export default function Products() {
                     <Photo p={p} />
 
                     {model(p) && (
+
                       <span>
                         Explore in 3D ↗
                       </span>
+
                     )}
 
                   </button>
+
+                  {/* PRODUCT INFORMATION */}
 
                   <div className="se-card-copy">
 
@@ -813,7 +1300,9 @@ export default function Products() {
                       className="se-name"
                       onClick={() => setSelected(p)}
                     >
+
                       {p.name}
+
                     </button>
 
                     <p>{p.description}</p>
@@ -829,7 +1318,9 @@ export default function Products() {
                         disabled={busy}
                         onClick={() => add(p)}
                       >
+
                         Add to bag +
+
                       </button>
 
                     </div>
@@ -853,11 +1344,21 @@ export default function Products() {
           <b>ShopEasy.</b>
 
           <span>
+
             Discover. Experience. Enjoy.
+
           </span>
 
+          <Link to="/wishlist">
+
+            My Wishlist ♡
+
+          </Link>
+
           <Link to="/cart">
+
             Shopping bag →
+
           </Link>
 
         </footer>
@@ -874,6 +1375,9 @@ export default function Products() {
           close={() => setSelected(null)}
           add={add}
           busy={busy}
+          saved={isSaved(selected)}
+          toggleWishlist={toggleWishlist}
+          wishlistDisabled={wishlistDisabled}
         />
 
       )}
@@ -890,13 +1394,88 @@ export default function Products() {
           {notice}
 
           <Link to="/cart">
+
             View bag
+
           </Link>
 
         </div>
 
       )}
 
+      {/* WISHLIST NOTIFICATION */}
+
+      {wishlistNotice && (
+
+        <div
+          className="se-wishlist-toast"
+          role="status"
+        >
+
+          <span>
+
+            {wishlistNotice}
+
+          </span>
+
+          {wishlistToken && !wishlistAvailable ? (
+
+            <>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setWishlistRetry(x => x + 1)
+                }
+                style={{
+                  fontSize: '13px',
+                  color: '#c1afff'
+                }}
+              >
+
+                Retry
+
+              </button>
+
+              <Link
+                to="/login"
+                onClick={() =>
+                  localStorage.removeItem('token')
+                }
+              >
+
+                Sign in again
+
+              </Link>
+
+            </>
+
+          ) : (
+
+            <Link to="/wishlist">
+
+              View Wishlist
+
+            </Link>
+
+          )}
+
+          <button
+            type="button"
+            aria-label="Dismiss notification"
+            onClick={() => setWishlistNotice('')}
+          >
+
+            ×
+
+          </button>
+
+        </div>
+
+      )}
+
     </main>
+
   );
+
 }

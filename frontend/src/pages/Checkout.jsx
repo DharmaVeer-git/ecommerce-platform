@@ -252,6 +252,12 @@ function Checkout() {
           >
             Continue shopping
           </button>
+          <button
+            className="sx-btn ghost"
+            onClick={() => navigate('/orders')}
+          >
+           View My Orders
+          </button>
 
         </motion.div>
 

@@ -6,8 +6,16 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const sendOTP = require('../utils/sendOTP');
 
+// ================= CONFIGURATION =================
+
 const OTP_EXPIRY = 5 * 60 * 1000;
 const RESEND_DELAY = 60 * 1000;
+const TERMS_VERSION = '1.0';
+
+const PROFILE_FIELDS =
+  'name email phone address isVerified termsAccepted termsAcceptedAt termsVersion createdAt';
+
+// ================= HELPER FUNCTIONS =================
 
 function hashOTP(otp, identifier) {
   return crypto
@@ -34,14 +42,30 @@ function normalizeEmail(email) {
     : '';
 }
 
+function normalizePhone(phone) {
+  return typeof phone === 'string'
+    ? phone.trim()
+    : '';
+}
+
 function validEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validPhone(phone) {
+  return /^[6-9]\d{9}$/.test(phone);
 }
 
 function handleError(res, error) {
   if (error.code === 11000) {
     return res.status(409).json({
       message: 'Account or registration already exists.'
+    });
+  }
+
+  if (error.name === 'ValidationError') {
+    return res.status(400).json({
+      message: 'Invalid account details.'
     });
   }
 
@@ -52,23 +76,45 @@ function handleError(res, error) {
   });
 }
 
-// CREATE PENDING REGISTRATION
+// ================= CREATE PENDING REGISTRATION =================
 
 exports.signup = async (req, res) => {
   try {
-    const { name, password } = req.body;
+    const {
+      name,
+      password,
+      phone,
+      termsAccepted
+    } = req.body;
+
     const email = normalizeEmail(req.body.email);
+    const mobile = normalizePhone(phone);
 
     if (
       typeof name !== 'string' ||
       !name.trim() ||
+      name.trim().length > 100 ||
       !validEmail(email) ||
       typeof password !== 'string' ||
       password.length < 8 ||
       Buffer.byteLength(password, 'utf8') > 72
     ) {
       return res.status(400).json({
-        message: 'Enter valid registration details and a password of at least 8 characters.'
+        message:
+          'Enter valid registration details and a password of at least 8 characters.'
+      });
+    }
+
+    if (!validPhone(mobile)) {
+      return res.status(400).json({
+        message: 'Enter a valid 10-digit mobile number.'
+      });
+    }
+
+    if (termsAccepted !== true) {
+      return res.status(400).json({
+        message:
+          'Please accept the Terms and Conditions and Privacy Policy.'
       });
     }
 
@@ -79,8 +125,13 @@ exports.signup = async (req, res) => {
     }
 
     const otp = generateOTP();
-    const challengeId = crypto.randomBytes(32).toString('hex');
+
+    const challengeId = crypto
+      .randomBytes(32)
+      .toString('hex');
+
     const passwordHash = await bcrypt.hash(password, 12);
+
     const now = new Date();
 
     const pending = await PendingUser.findOneAndUpdate(
@@ -102,22 +153,38 @@ exports.signup = async (req, res) => {
           name: name.trim(),
           email,
           password: passwordHash,
+
+          phone: mobile,
+
+          termsAccepted: true,
+          termsAcceptedAt: now,
+          termsVersion: TERMS_VERSION,
+
           challengeId,
           otpHash: hashOTP(otp, challengeId),
-          otpExpires: new Date(Date.now() + OTP_EXPIRY),
+
+          otpExpires: new Date(
+            Date.now() + OTP_EXPIRY
+          ),
+
           otpAttempts: 0,
           otpLastSent: now,
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000)
+
+          expiresAt: new Date(
+            Date.now() + 30 * 60 * 1000
+          )
         }
       },
       {
         upsert: true,
-        new: true
+        new: true,
+        runValidators: true
       }
     );
 
     try {
       await sendOTP(email, otp);
+
     } catch {
       await PendingUser.deleteOne({
         _id: pending._id,
@@ -141,18 +208,24 @@ exports.signup = async (req, res) => {
   }
 };
 
-// ISSUE LOGIN OTP
+// ================= ISSUE LOGIN OTP =================
 
 async function issueLoginOTP(user) {
   const otp = generateOTP();
+
   const otpHash = hashOTP(otp, user._id);
 
   const updated = await User.findOneAndUpdate(
     {
       _id: user._id,
+
       $or: [
-        { otpLastSent: { $exists: false } },
-        { otpLastSent: null },
+        {
+          otpLastSent: { $exists: false }
+        },
+        {
+          otpLastSent: null
+        },
         {
           otpLastSent: {
             $lte: new Date(Date.now() - RESEND_DELAY)
@@ -163,7 +236,11 @@ async function issueLoginOTP(user) {
     {
       $set: {
         otpHash,
-        otpExpires: new Date(Date.now() + OTP_EXPIRY),
+
+        otpExpires: new Date(
+          Date.now() + OTP_EXPIRY
+        ),
+
         otpAttempts: 0,
         otpLastSent: new Date(),
         otpPurpose: 'login'
@@ -179,9 +256,13 @@ async function issueLoginOTP(user) {
 
   try {
     await sendOTP(user.email, otp);
+
   } catch {
     await User.updateOne(
-      { _id: user._id, otpHash },
+      {
+        _id: user._id,
+        otpHash
+      },
       {
         $unset: {
           otpHash: 1,
@@ -193,18 +274,23 @@ async function issueLoginOTP(user) {
 
     const error = new Error('Unable to send OTP.');
     error.status = 503;
+
     throw error;
   }
 }
 
-// PASSWORD LOGIN
+// ================= PASSWORD LOGIN =================
 
 exports.login = async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
+
     const { password } = req.body;
 
-    if (!validEmail(email) || typeof password !== 'string') {
+    if (
+      !validEmail(email) ||
+      typeof password !== 'string'
+    ) {
       return res.status(400).json({
         message: 'Invalid credentials.'
       });
@@ -215,7 +301,10 @@ exports.login = async (req, res) => {
       isVerified: { $ne: false }
     });
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    if (
+      !user ||
+      !(await bcrypt.compare(password, user.password))
+    ) {
       return res.status(400).json({
         message: 'Invalid credentials.'
       });
@@ -234,11 +323,12 @@ exports.login = async (req, res) => {
   }
 };
 
-// REQUEST OR RESEND OTP
+// ================= REQUEST OR RESEND OTP =================
 
 exports.requestOTP = async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
+
     const { challengeId } = req.body;
 
     if (!validEmail(email)) {
@@ -249,15 +339,23 @@ exports.requestOTP = async (req, res) => {
 
     // Resend registration OTP
 
-    if (typeof challengeId === 'string' && challengeId) {
+    if (
+      typeof challengeId === 'string' &&
+      challengeId
+    ) {
       const otp = generateOTP();
+
       const otpHash = hashOTP(otp, challengeId);
 
       const pending = await PendingUser.findOneAndUpdate(
         {
           email,
           challengeId,
-          expiresAt: { $gt: new Date() },
+
+          expiresAt: {
+            $gt: new Date()
+          },
+
           otpLastSent: {
             $lte: new Date(Date.now() - RESEND_DELAY)
           }
@@ -265,7 +363,11 @@ exports.requestOTP = async (req, res) => {
         {
           $set: {
             otpHash,
-            otpExpires: new Date(Date.now() + OTP_EXPIRY),
+
+            otpExpires: new Date(
+              Date.now() + OTP_EXPIRY
+            ),
+
             otpAttempts: 0,
             otpLastSent: new Date()
           }
@@ -274,12 +376,14 @@ exports.requestOTP = async (req, res) => {
 
       if (!pending) {
         return res.status(400).json({
-          message: 'Wait 60 seconds or restart registration.'
+          message:
+            'Wait 60 seconds or restart registration.'
         });
       }
 
       try {
         await sendOTP(email, otp);
+
       } catch {
         return res.status(503).json({
           message: 'Unable to send OTP. Try again later.'
@@ -294,20 +398,29 @@ exports.requestOTP = async (req, res) => {
 
     // Passwordless login
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      email,
+      isVerified: { $ne: false }
+    });
 
     if (user) {
       try {
         await issueLoginOTP(user);
+
       } catch (error) {
-        if (error.status !== 429 && error.status !== 503) {
+        if (
+          error.status !== 429 &&
+          error.status !== 503
+        ) {
           throw error;
         }
       }
     }
 
     return res.json({
-      message: 'If your account exists, an OTP will be sent.',
+      message:
+        'If your account exists, an OTP will be sent.',
+
       requiresOTP: true
     });
 
@@ -316,36 +429,74 @@ exports.requestOTP = async (req, res) => {
   }
 };
 
-// VERIFY REGISTRATION OTP
+// ================= VERIFY REGISTRATION OTP =================
 
-async function verifyRegistration(email, otp, challengeId, res) {
+async function verifyRegistration(
+  email,
+  otp,
+  challengeId,
+  res
+) {
   const filter = {
     email,
     challengeId,
-    otpExpires: { $gt: new Date() },
-    expiresAt: { $gt: new Date() },
-    otpAttempts: { $lt: 5 }
+
+    otpExpires: {
+      $gt: new Date()
+    },
+
+    expiresAt: {
+      $gt: new Date()
+    },
+
+    otpAttempts: {
+      $lt: 5
+    }
   };
 
-  const pending = await PendingUser.findOne(filter)
+  const pending = await PendingUser
+    .findOne(filter)
     .select('+otpHash');
 
   if (!pending) {
     return res.status(400).json({
-      message: 'Invalid or expired registration. Request a new OTP.'
+      message:
+        'Invalid or expired registration. Request a new OTP.'
     });
   }
 
-  const submittedHash = hashOTP(otp, challengeId);
+  const submittedHash = hashOTP(
+    otp,
+    challengeId
+  );
 
   if (submittedHash !== pending.otpHash) {
     await PendingUser.updateOne(
-      { ...filter, otpHash: pending.otpHash },
-      { $inc: { otpAttempts: 1 } }
+      {
+        ...filter,
+        otpHash: pending.otpHash
+      },
+      {
+        $inc: {
+          otpAttempts: 1
+        }
+      }
     );
 
     return res.status(400).json({
       message: 'Incorrect OTP.'
+    });
+  }
+
+  // Ensure registration contains the required profile details
+
+  if (
+    !validPhone(normalizePhone(pending.phone)) ||
+    pending.termsAccepted !== true
+  ) {
+    return res.status(400).json({
+      message:
+        'Registration details are incomplete. Please restart registration.'
     });
   }
 
@@ -360,27 +511,53 @@ async function verifyRegistration(email, otp, challengeId, res) {
     });
   }
 
-  // Create permanent account only after verification
+  // Create permanent customer account
+  // Profile details are automatically saved here.
 
   const user = await User.create({
     name: verified.name,
+
     email: verified.email,
+
     password: verified.password,
+
+    phone: verified.phone,
+
+    termsAccepted: verified.termsAccepted,
+
+    termsAcceptedAt: verified.termsAcceptedAt,
+
+    termsVersion: verified.termsVersion,
+
     isVerified: true
   });
 
   return res.json({
     message: 'Account verified successfully.',
-    token: createToken(user)
+
+    token: createToken(user),
+
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      isVerified: user.isVerified,
+      createdAt: user.createdAt
+    }
   });
 }
 
-// VERIFY LOGIN OR REGISTRATION OTP
+// ================= VERIFY LOGIN OR REGISTRATION OTP =================
 
 exports.verifyOTP = async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
-    const { otp, challengeId } = req.body;
+
+    const {
+      otp,
+      challengeId
+    } = req.body;
 
     if (
       !validEmail(email) ||
@@ -392,7 +569,12 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    if (typeof challengeId === 'string' && challengeId) {
+    // Registration OTP
+
+    if (
+      typeof challengeId === 'string' &&
+      challengeId
+    ) {
       return await verifyRegistration(
         email,
         otp,
@@ -400,6 +582,8 @@ exports.verifyOTP = async (req, res) => {
         res
       );
     }
+
+    // Login OTP
 
     const user = await User.findOne({
       email,
@@ -419,20 +603,35 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    const submittedHash = hashOTP(otp, user._id);
+    const submittedHash = hashOTP(
+      otp,
+      user._id
+    );
 
     const filter = {
       _id: user._id,
+
       otpHash: user.otpHash,
+
       otpPurpose: 'login',
-      otpExpires: { $gt: new Date() },
-      otpAttempts: { $lt: 5 }
+
+      otpExpires: {
+        $gt: new Date()
+      },
+
+      otpAttempts: {
+        $lt: 5
+      }
     };
 
     if (submittedHash !== user.otpHash) {
       await User.updateOne(
         filter,
-        { $inc: { otpAttempts: 1 } }
+        {
+          $inc: {
+            otpAttempts: 1
+          }
+        }
       );
 
       return res.status(400).json({
@@ -447,13 +646,16 @@ exports.verifyOTP = async (req, res) => {
           isVerified: true,
           otpAttempts: 0
         },
+
         $unset: {
           otpHash: 1,
           otpExpires: 1,
           otpPurpose: 1
         }
       },
-      { new: true }
+      {
+        new: true
+      }
     );
 
     if (!verifiedUser) {
@@ -464,7 +666,201 @@ exports.verifyOTP = async (req, res) => {
 
     return res.json({
       message: 'Login successful.',
-      token: createToken(verifiedUser)
+
+      token: createToken(verifiedUser),
+
+      user: {
+        id: verifiedUser._id,
+        name: verifiedUser.name,
+        email: verifiedUser.email,
+        phone: verifiedUser.phone || '',
+        isVerified: verifiedUser.isVerified,
+        createdAt: verifiedUser.createdAt
+      }
+    });
+
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// ================= GET CUSTOMER PROFILE =================
+
+exports.getProfile = async (req, res) => {
+  try {
+    const user = await User.findOne({
+      _id: req.userId,
+      isVerified: { $ne: false }
+    }).select(PROFILE_FIELDS);
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'Customer account not found.'
+      });
+    }
+
+    return res.status(200).json(user);
+
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// ================= UPDATE CUSTOMER PROFILE =================
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const {
+      name,
+      phone
+    } = req.body;
+
+    const mobile = normalizePhone(phone);
+
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      name.trim().length > 100
+    ) {
+      return res.status(400).json({
+        message: 'Enter a valid full name.'
+      });
+    }
+
+    if (!validPhone(mobile)) {
+      return res.status(400).json({
+        message: 'Enter a valid 10-digit mobile number.'
+      });
+    }
+
+    const user = await User.findOneAndUpdate(
+      {
+        _id: req.userId,
+        isVerified: { $ne: false }
+      },
+      {
+        $set: {
+          name: name.trim(),
+          phone: mobile
+        }
+      },
+      {
+        new: true,
+        runValidators: true
+      }
+    ).select(PROFILE_FIELDS);
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'Customer account not found.'
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Profile updated successfully.',
+      user
+    });
+
+  } catch (error) {
+    return handleError(res, error);
+  }
+};
+
+// ================= UPDATE DELIVERY ADDRESS =================
+
+exports.updateAddress = async (req, res) => {
+  try {
+    const {
+      fullName,
+      phone,
+      street,
+      landmark = '',
+      city,
+      state,
+      pincode
+    } = req.body;
+
+    const mobile = normalizePhone(phone);
+
+    const requiredFields = [
+      fullName,
+      street,
+      city,
+      state,
+      pincode
+    ];
+
+    if (
+      requiredFields.some(
+        value =>
+          typeof value !== 'string' ||
+          !value.trim() ||
+          value.trim().length > 250
+      )
+    ) {
+      return res.status(400).json({
+        message:
+          'Please enter all required delivery address details.'
+      });
+    }
+
+    if (!validPhone(mobile)) {
+      return res.status(400).json({
+        message: 'Enter a valid delivery mobile number.'
+      });
+    }
+
+    if (!/^[1-9]\d{5}$/.test(pincode.trim())) {
+      return res.status(400).json({
+        message: 'Enter a valid six-digit PIN code.'
+      });
+    }
+
+    if (
+      typeof landmark !== 'string' ||
+      landmark.trim().length > 250
+    ) {
+      return res.status(400).json({
+        message: 'Invalid landmark.'
+      });
+    }
+
+    const address = {
+      fullName: fullName.trim(),
+      phone: mobile,
+      street: street.trim(),
+      landmark: landmark.trim(),
+      city: city.trim(),
+      state: state.trim(),
+      pincode: pincode.trim(),
+      country: 'India'
+    };
+
+    const user = await User.findOneAndUpdate(
+      {
+        _id: req.userId,
+        isVerified: { $ne: false }
+      },
+      {
+        $set: {
+          address
+        }
+      },
+      {
+        new: true,
+        runValidators: true
+      }
+    ).select(PROFILE_FIELDS);
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'Customer account not found.'
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Delivery address saved successfully.',
+      user
     });
 
   } catch (error) {

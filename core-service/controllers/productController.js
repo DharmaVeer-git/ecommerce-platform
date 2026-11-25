@@ -1,10 +1,44 @@
-
 const Product = require('../models/Product');
 const cloudinary = require('../config/cloudinary');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
-// Validate uploaded files
+// ================= SUPPORTED CATEGORIES =================
+
+const PRODUCT_CATEGORIES = [
+  'Electronics',
+  'Fashion',
+  'Accessories'
+];
+
+// ================= NORMALIZE CATEGORY =================
+
+function normalizeCategory(value) {
+  const category = String(value || '')
+    .trim()
+    .toLowerCase();
+
+  const aliases = {
+    electronics: 'Electronics',
+    tech: 'Electronics',
+    technology: 'Electronics',
+
+    fashion: 'Fashion',
+    footwear: 'Fashion',
+    clothing: 'Fashion',
+
+    accessories: 'Accessories',
+    accessory: 'Accessories'
+  };
+
+  return Object.prototype.hasOwnProperty.call(
+    aliases,
+    category
+  ) ? aliases[category] : '';
+}
+
+// ================= VALIDATE UPLOADED FILES =================
+
 function validateFile(file, type) {
   if (!file) return;
 
@@ -43,7 +77,8 @@ function validateFile(file, type) {
   }
 }
 
-// Upload file to Cloudinary
+// ================= UPLOAD FILE TO CLOUDINARY =================
+
 function uploadFile(file, type) {
   return new Promise((resolve, reject) => {
     const isModel = type === 'model';
@@ -61,8 +96,10 @@ function uploadFile(file, type) {
 
         overwrite: false
       },
+
       (error, result) => {
         if (error) return reject(error);
+
         resolve(result);
       }
     );
@@ -72,7 +109,8 @@ function uploadFile(file, type) {
   });
 }
 
-// Remove Cloudinary file
+// ================= REMOVE CLOUDINARY FILE =================
+
 async function removeFile(publicId, type) {
   if (!publicId) return;
 
@@ -81,44 +119,86 @@ async function removeFile(publicId, type) {
       resource_type: type,
       invalidate: true
     });
+
   } catch (error) {
     console.error('Cloudinary cleanup failed');
   }
 }
 
-// Validate product details
+// ================= VALIDATE PRODUCT DETAILS =================
+
 function productDetails(body) {
+
   const name = String(body.name || '').trim();
+
   const price = Number(body.price);
+
   const stock = Number(body.stock ?? 0);
 
+  const category = normalizeCategory(body.category);
+
+  // Validate product name
+  if (!name) {
+    throw new Error('Product name is required');
+  }
+
+  // Validate price
   if (
-    !name ||
     body.price === undefined ||
+    body.price === null ||
     String(body.price).trim() === '' ||
     !Number.isFinite(price) ||
-    price < 0 ||
-    !Number.isInteger(stock) ||
+    price <= 0
+  ) {
+    throw new Error(
+      'Product price must be greater than zero'
+    );
+  }
+
+  // Validate stock
+  if (
+    !Number.isSafeInteger(stock) ||
     stock < 0
   ) {
-    throw new Error('Invalid product name, price or stock');
+    throw new Error(
+      'Stock must be a non-negative whole number'
+    );
+  }
+
+  // Validate category
+  if (!PRODUCT_CATEGORIES.includes(category)) {
+    throw new Error(
+      'Please select Electronics, Fashion or Accessories'
+    );
   }
 
   return {
     name,
-    description: String(body.description || ''),
+
+    description: String(
+      body.description || ''
+    ).trim(),
+
     price,
+
     stock,
-    category: String(body.category || 'General'),
-    brand: String(body.brand || ''),
+
+    category,
+
+    brand: String(
+      body.brand || ''
+    ).trim(),
+
     isActive:
       body.isActive !== false &&
       body.isActive !== 'false'
   };
 }
 
-// CREATE PRODUCT
+// ================= CREATE PRODUCT =================
+
 exports.createProduct = async (req, res) => {
+
   let imageResult;
   let modelResult;
   let details;
@@ -127,110 +207,172 @@ exports.createProduct = async (req, res) => {
   const modelFile = req.files?.model?.[0];
 
   try {
+
     details = productDetails(req.body);
+
+    if (!imageFile) {
+      throw new Error('Product image is required');
+    }
+
     validateFile(imageFile, 'image');
     validateFile(modelFile, 'model');
+
   } catch (error) {
+
     return res.status(400).json({
       message: error.message
     });
+
   }
 
   try {
+
     if (imageFile) {
-      imageResult = await uploadFile(imageFile, 'image');
+      imageResult = await uploadFile(
+        imageFile,
+        'image'
+      );
     }
 
     if (modelFile) {
-      modelResult = await uploadFile(modelFile, 'model');
+      modelResult = await uploadFile(
+        modelFile,
+        'model'
+      );
     }
 
     const product = await Product.create({
+
       ...details,
 
       image: imageResult?.secure_url || '',
-      imagePublicId: imageResult?.public_id || '',
 
-      modelUrl: modelResult?.secure_url || '',
-      modelPublicId: modelResult?.public_id || ''
+      imagePublicId:
+        imageResult?.public_id || '',
+
+      modelUrl:
+        modelResult?.secure_url || '',
+
+      modelPublicId:
+        modelResult?.public_id || ''
+
     });
 
     return res.status(201).json(product);
 
   } catch (error) {
-    await removeFile(imageResult?.public_id, 'image');
-    await removeFile(modelResult?.public_id, 'raw');
+
+    await removeFile(
+      imageResult?.public_id,
+      'image'
+    );
+
+    await removeFile(
+      modelResult?.public_id,
+      'raw'
+    );
 
     console.error('Product creation failed');
 
     return res.status(500).json({
       message: 'Failed to create product'
     });
+
   }
 };
 
-// GET PUBLIC PRODUCTS
-exports.getProducts = async (req, res) => {
-  try {
-    const products = await Product.find({
-      isActive: { $ne: false }
-    }).sort({ createdAt: -1 });
+// ================= GET PUBLIC PRODUCTS =================
 
-    res.status(200).json(products);
+exports.getProducts = async (req, res) => {
+
+  try {
+
+    const products = await Product.find({
+
+      isActive: { $ne: false }
+
+    }).sort({
+
+      createdAt: -1
+
+    });
+
+    return res.status(200).json(products);
 
   } catch (error) {
-    res.status(500).json({
+
+    return res.status(500).json({
       message: 'Failed to fetch products'
     });
+
   }
 };
 
-// GET SINGLE PRODUCT
+// ================= GET SINGLE PRODUCT =================
+
 exports.getProductById = async (req, res) => {
+
   try {
+
     if (!mongoose.isValidObjectId(req.params.id)) {
+
       return res.status(400).json({
         message: 'Invalid product ID'
       });
+
     }
 
     const product = await Product.findOne({
+
       _id: req.params.id,
+
       isActive: { $ne: false }
+
     });
 
     if (!product) {
+
       return res.status(404).json({
         message: 'Product not found'
       });
+
     }
 
-    res.status(200).json(product);
+    return res.status(200).json(product);
 
   } catch (error) {
-    res.status(500).json({
+
+    return res.status(500).json({
       message: 'Failed to fetch product'
     });
+
   }
 };
 
-// GET ALL PRODUCTS FOR ADMIN
+// ================= GET ALL PRODUCTS FOR ADMIN =================
+
 exports.getAdminProducts = async (req, res) => {
+
   try {
+
     const products = await Product.find()
       .sort({ createdAt: -1 });
 
-    res.status(200).json(products);
+    return res.status(200).json(products);
 
   } catch (error) {
-    res.status(500).json({
+
+    return res.status(500).json({
       message: 'Failed to fetch products'
     });
+
   }
 };
 
-// UPDATE PRODUCT
+// ================= UPDATE PRODUCT =================
+
 exports.updateProduct = async (req, res) => {
+
   let imageResult;
   let modelResult;
 
@@ -238,106 +380,181 @@ exports.updateProduct = async (req, res) => {
   const modelFile = req.files?.model?.[0];
 
   try {
+
     if (!mongoose.isValidObjectId(req.params.id)) {
+
       return res.status(400).json({
         message: 'Invalid product ID'
       });
+
     }
 
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findById(
+      req.params.id
+    );
 
     if (!product) {
+
       return res.status(404).json({
         message: 'Product not found'
       });
+
     }
 
     let details;
 
     try {
+
       details = productDetails({
+
         ...product.toObject(),
+
         ...req.body
+
       });
 
       validateFile(imageFile, 'image');
       validateFile(modelFile, 'model');
 
     } catch (error) {
+
       return res.status(400).json({
         message: error.message
       });
+
     }
 
     const oldImageId = product.imagePublicId;
+
     const oldModelId = product.modelPublicId;
 
+    // Update product image if a new image is uploaded
+
     if (imageFile) {
-      imageResult = await uploadFile(imageFile, 'image');
+
+      imageResult = await uploadFile(
+        imageFile,
+        'image'
+      );
+
       product.image = imageResult.secure_url;
-      product.imagePublicId = imageResult.public_id;
+
+      product.imagePublicId =
+        imageResult.public_id;
+
     }
 
+    // Update 3D model if a new model is uploaded
+
     if (modelFile) {
-      modelResult = await uploadFile(modelFile, 'model');
-      product.modelUrl = modelResult.secure_url;
-      product.modelPublicId = modelResult.public_id;
+
+      modelResult = await uploadFile(
+        modelFile,
+        'model'
+      );
+
+      product.modelUrl =
+        modelResult.secure_url;
+
+      product.modelPublicId =
+        modelResult.public_id;
+
     }
+
+    // Update product details including category
 
     Object.assign(product, details);
 
     await product.save();
 
+    // Remove previous Cloudinary files
+
     if (imageResult) {
-      await removeFile(oldImageId, 'image');
+
+      await removeFile(
+        oldImageId,
+        'image'
+      );
+
     }
 
     if (modelResult) {
-      await removeFile(oldModelId, 'raw');
+
+      await removeFile(
+        oldModelId,
+        'raw'
+      );
+
     }
 
-    res.status(200).json(product);
+    return res.status(200).json(product);
 
   } catch (error) {
-    await removeFile(imageResult?.public_id, 'image');
-    await removeFile(modelResult?.public_id, 'raw');
+
+    await removeFile(
+      imageResult?.public_id,
+      'image'
+    );
+
+    await removeFile(
+      modelResult?.public_id,
+      'raw'
+    );
 
     console.error('Product update failed');
 
-    res.status(500).json({
+    return res.status(500).json({
       message: 'Failed to update product'
     });
+
   }
 };
 
-// DELETE PRODUCT (SOFT DELETE)
+// ================= DELETE PRODUCT (SOFT DELETE) =================
+
 exports.deleteProduct = async (req, res) => {
+
   try {
+
     if (!mongoose.isValidObjectId(req.params.id)) {
+
       return res.status(400).json({
         message: 'Invalid product ID'
       });
+
     }
 
     const product = await Product.findByIdAndUpdate(
+
       req.params.id,
-      { isActive: false },
-      { new: true }
+
+      {
+        isActive: false
+      },
+
+      {
+        new: true
+      }
+
     );
 
     if (!product) {
+
       return res.status(404).json({
         message: 'Product not found'
       });
+
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       message: 'Product removed from storefront'
     });
 
   } catch (error) {
-    res.status(500).json({
+
+    return res.status(500).json({
       message: 'Failed to remove product'
     });
+
   }
 };

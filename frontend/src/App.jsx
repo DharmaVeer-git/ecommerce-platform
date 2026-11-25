@@ -10,13 +10,18 @@ import {
 } from 'react-router-dom';
 
 import Navbar from './components/Navbar';
+
 import Login from './pages/Login';
 import Products from './pages/Products';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
-
+import Profile from './pages/Profile';
+import Legal from './pages/Legal';
+import Orders from './pages/Orders';
+import Wishlist from './pages/Wishlist';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import AISupport from './pages/AISupport';
 
 function PublicRoute({ children }) {
   return localStorage.getItem('token')
@@ -78,6 +83,48 @@ function AppRoutes() {
               <Checkout />
             </PrivateRoute>
           }
+        />
+
+        <Route
+          path="/profile"
+          element={
+            <PrivateRoute>
+              <Profile />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/orders"
+          element={
+            <PrivateRoute>
+              <Orders />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/wishlist"
+          element={
+            <PrivateRoute>
+              <Wishlist />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/ai-support"
+          element={<AISupport />}
+        />
+
+        <Route
+          path="/terms"
+          element={<Legal type="terms" />}
+        />
+
+        <Route
+          path="/privacy"
+          element={<Legal type="privacy" />}
         />
 
         <Route

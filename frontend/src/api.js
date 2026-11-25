@@ -130,3 +130,69 @@ export const deleteAdminProduct = (id, token) =>
   axios.delete(`${ADMIN_URL}/admin/products/${id}`, {
     headers: adminHeaders(token)
   });
+  // ================= CUSTOMER PROFILE =================
+
+export const getProfile = (token) =>
+  axios.get(`${AUTH_URL}/auth/profile`, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+export const updateProfile = (data, token) =>
+  axios.put(`${AUTH_URL}/auth/profile`, data, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+// ================= DELIVERY ADDRESS =================
+
+export const updateAddress = (data, token) =>
+  axios.put(`${AUTH_URL}/auth/profile/address`, data, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+  // ================= CUSTOMER WISHLIST =================
+
+export const getWishlist = (token) =>
+  axios.get(`${CORE_URL}/wishlist`, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+export const addToWishlist = (productId, token) =>
+  axios.post(
+    `${CORE_URL}/wishlist`,
+    { productId },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  );
+
+export const removeFromWishlist = (productId, token) =>
+  axios.delete(
+    `${CORE_URL}/wishlist/${productId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  );
+  // ================= AI CUSTOMER SUPPORT =================
+
+export const sendAIMessage = (message, token) =>
+  axios.post(
+    `${CORE_URL}/ai/chat`,
+    { message },
+    {
+      headers: token
+        ? { Authorization: `Bearer ${token}` }
+        : {},
+      timeout: 120000
+    }
+  );

@@ -20,12 +20,40 @@ import './Admin.css';
 
 const ProductViewer = lazy(() => import('./ProductViewer'));
 
+const PRODUCT_CATEGORIES = [
+  'Electronics',
+  'Fashion',
+  'Accessories'
+];
+
+function normalizeCategory(value) {
+
+  const category = String(value || '')
+    .trim()
+    .toLowerCase();
+
+  const aliases = {
+    electronics: 'Electronics',
+    tech: 'Electronics',
+    technology: 'Electronics',
+    fashion: 'Fashion',
+    footwear: 'Fashion',
+    clothing: 'Fashion',
+    accessories: 'Accessories',
+    accessory: 'Accessories'
+  };
+
+  return Object.prototype.hasOwnProperty.call(
+    aliases, category
+  ) ? aliases[category] : '';
+}
+
 const emptyForm = {
   name: '',
   description: '',
   price: '',
   stock: '',
-  category: 'Tech',
+  category: '',
   brand: '',
   isActive: true
 };
@@ -304,9 +332,12 @@ export default function AdminDashboard() {
       return;
     }
 
-    if (!form.category.trim()) {
-      setError('Please enter a product category.');
+    if (!PRODUCT_CATEGORIES.includes(form.category)) {
+
+      setError('Please select a valid product category.');
+
       return;
+
     }
 
     if (!editing && !image) {
@@ -402,7 +433,7 @@ export default function AdminDashboard() {
       description: product.description || '',
       price: product.price ?? '',
       stock: product.stock ?? 0,
-      category: product.category || 'Tech',
+      category: normalizeCategory(product.category),
       brand: product.brand || '',
       isActive: product.isActive !== false
     });
@@ -728,27 +759,57 @@ export default function AdminDashboard() {
 
               <label>
 
-                Category
+                Product Category *
 
-                <input
+                <select
                   name="category"
-                  list="admin-categories"
                   value={form.category}
                   onChange={changeField}
                   required
-                />
+                  style={{
+                    width: '100%',
+                    padding: '13px 14px',
+                    background: '#181e2e',
+                    color: '#f5f6fb',
+                    border: '1px solid #343b4e',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
 
-                <datalist id="admin-categories">
+                  <option value="">
+                    Select Product Category
+                  </option>
 
-                  <option value="Tech" />
-                  <option value="Footwear" />
-                  <option value="Accessories" />
-                  <option value="Clothing" />
-                  <option value="Home" />
-                  <option value="Fitness" />
-                  <option value="General" />
+                  {PRODUCT_CATEGORIES.map(category => (
 
-                </datalist>
+                    <option
+                      key={category}
+                      value={category}
+                    >
+                      {category}
+                    </option>
+
+                  ))}
+
+                </select>
+
+                {form.category && (
+
+                  <small style={{
+                    display: 'block',
+                    color: '#86efac',
+                    marginTop: '8px'
+                  }}>
+
+                    {form.isActive
+                      ? `Visible in All Products and ${form.category} after publishing.`
+                      : 'Product will remain hidden until published.'}
+
+                  </small>
+
+                )}
 
               </label>
 
@@ -1037,7 +1098,7 @@ export default function AdminDashboard() {
                   </td>
 
                   <td>
-                    {product.category || 'General'}
+                    {normalizeCategory(product.category) || product.category || 'General'}
                   </td>
 
                   <td>

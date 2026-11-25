@@ -1,25 +1,48 @@
+
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { login, signup, requestOTP, verifyOTP } from '../api';
 import '../index.css';
 
 export default function Login() {
+
   const [mode, setMode] = useState('login');
   const [stage, setStage] = useState('credentials');
+
+  // CUSTOMER DETAILS
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  // OTP AUTHENTICATION
+
   const [otp, setOtp] = useState('');
   const [challengeId, setChallengeId] = useState('');
+
+  // UI STATES
+
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+
   const [showPassword, setShowPassword] = useState(false);
+
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false);
 
   const navigate = useNavigate();
 
+  // ================= OTP COUNTDOWN =================
+
   useEffect(() => {
+
     if (cooldown <= 0) return;
 
     const timer = setTimeout(() => {
@@ -27,19 +50,36 @@ export default function Login() {
     }, 1000);
 
     return () => clearTimeout(timer);
+
   }, [cooldown]);
 
+  // ================= CHANGE AUTH MODE =================
+
   function changeMode(nextMode) {
+
     setMode(nextMode);
     setStage('credentials');
+
     setError('');
     setNotice('');
+
     setPassword('');
+    setConfirmPassword('');
+
     setOtp('');
     setChallengeId('');
+
+    setTermsAccepted(false);
+    setCooldown(0);
+
+    setShowPassword(false);
+    setShowConfirmPassword(false);
   }
 
+  // ================= HANDLE AUTHENTICATION =================
+
   async function handleSubmit(e) {
+
     e.preventDefault();
 
     if (loading) return;
@@ -49,9 +89,13 @@ export default function Login() {
     setLoading(true);
 
     try {
+
       const cleanEmail = email.trim().toLowerCase();
 
+      // VERIFY OTP
+
       if (stage === 'otp') {
+
         const res = await verifyOTP({
           email: cleanEmail,
           otp,
@@ -59,44 +103,106 @@ export default function Login() {
         });
 
         if (!res.data.token) {
-          throw new Error('Authentication failed');
+          throw new Error('Authentication failed.');
         }
 
         localStorage.setItem('token', res.data.token);
 
-        navigate('/products', { replace: true });
+        // NEW CUSTOMER: OPEN PROFILE
+        // EXISTING CUSTOMER: OPEN PRODUCTS
+
+        navigate(
+          mode === 'signup' ? '/profile' : '/products',
+          { replace: true }
+        );
 
         return;
       }
 
       let res;
 
+      // ================= NEW CUSTOMER REGISTRATION =================
+
       if (mode === 'signup') {
+
+        if (!name.trim() || name.trim().length > 100) {
+          throw new Error('Please enter a valid full name.');
+        }
+
+        if (!/^[6-9]\d{9}$/.test(phone)) {
+          throw new Error(
+            'Please enter a valid 10-digit mobile number.'
+          );
+        }
+
+        if (password.length < 8) {
+          throw new Error(
+            'Password must contain at least 8 characters.'
+          );
+        }
+
+        if (new TextEncoder().encode(password).length > 72) {
+          throw new Error('Password is too long.');
+        }
+
+        if (password !== confirmPassword) {
+          throw new Error('Passwords do not match.');
+        }
+
+        if (!termsAccepted) {
+          throw new Error(
+            'Please accept the Terms and Conditions and Privacy Policy.'
+          );
+        }
+
         res = await signup({
-          name,
+          name: name.trim(),
           email: cleanEmail,
-          password
+          phone,
+          password,
+          termsAccepted
         });
+
+      // ================= PASSWORDLESS LOGIN =================
+
       } else if (mode === 'otp') {
+
         res = await requestOTP({
           email: cleanEmail
         });
+
+      // ================= PASSWORD LOGIN =================
+
       } else {
+
         res = await login({
           email: cleanEmail,
           password
         });
+
       }
 
       if (!res.data.requiresOTP) {
-        throw new Error('OTP backend is not ready yet');
+        throw new Error(
+          'OTP authentication is currently unavailable.'
+        );
+      }
+
+      if (mode === 'signup' && !res.data.challengeId) {
+        throw new Error(
+          'Registration could not be started. Please try again.'
+        );
       }
 
       setEmail(cleanEmail);
       setChallengeId(res.data.challengeId || '');
+
       setStage('otp');
+
       setPassword('');
+      setConfirmPassword('');
       setOtp('');
+
       setCooldown(60);
 
       setNotice(
@@ -106,17 +212,24 @@ export default function Login() {
       );
 
     } catch (err) {
+
       setError(
         err.response?.data?.message ||
         err.message ||
         'Something went wrong. Please try again.'
       );
+
     } finally {
+
       setLoading(false);
+
     }
   }
 
+  // ================= RESEND OTP =================
+
   async function resendOTP() {
+
     if (cooldown > 0 || loading) return;
 
     setLoading(true);
@@ -124,6 +237,7 @@ export default function Login() {
     setNotice('');
 
     try {
+
       await requestOTP({
         email,
         challengeId
@@ -137,16 +251,23 @@ export default function Login() {
       );
 
     } catch (err) {
+
       setError(
         err.response?.data?.message ||
         'Unable to request OTP.'
       );
+
     } finally {
+
       setLoading(false);
+
     }
   }
 
+  // ================= USER INTERFACE =================
+
   return (
+
     <main className="auth-screen">
 
       {/* LEFT SIDE VISUAL SECTION */}
@@ -284,11 +405,42 @@ export default function Login() {
 
               {stage === 'otp'
                 ? `Enter the six-digit code sent to ${email}`
+                : mode === 'signup'
+                ? 'Create your personal shopping profile.'
                 : 'Your premium shopping experience awaits.'}
 
             </p>
 
           </div>
+
+          {/* REGISTRATION INFORMATION */}
+
+          {mode === 'signup' && stage === 'credentials' && (
+
+            <div
+              style={{
+                padding: '12px 15px',
+                marginBottom: '20px',
+                background: 'rgba(155, 135, 245, 0.08)',
+                border: '1px solid rgba(155, 135, 245, 0.20)',
+                borderRadius: '12px',
+                fontSize: '12px',
+                lineHeight: '1.7',
+                color: '#a99bd6'
+              }}
+            >
+
+              <strong>✦ Your personal ShopEasy account</strong>
+
+              <p style={{ margin: '5px 0 0' }}>
+                Your registration details will automatically
+                be saved to your customer profile after
+                successful email verification.
+              </p>
+
+            </div>
+
+          )}
 
           {/* ERROR MESSAGE */}
 
@@ -370,6 +522,8 @@ export default function Login() {
 
               <>
 
+                {/* FULL NAME */}
+
                 {mode === 'signup' && (
 
                   <label className="field-group">
@@ -378,11 +532,12 @@ export default function Login() {
 
                     <input
                       type="text"
-                      placeholder="Your name"
+                      placeholder="Enter your full name"
                       value={name}
                       onChange={e =>
                         setName(e.target.value)
                       }
+                      maxLength={100}
                       autoComplete="name"
                       required
                     />
@@ -390,6 +545,8 @@ export default function Login() {
                   </label>
 
                 )}
+
+                {/* EMAIL ADDRESS */}
 
                 <label className="field-group">
 
@@ -408,6 +565,75 @@ export default function Login() {
 
                 </label>
 
+                {/* MOBILE NUMBER */}
+
+                {mode === 'signup' && (
+
+                  <label className="field-group">
+
+                    <span>MOBILE NUMBER</span>
+
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: '100%'
+                      }}
+                    >
+
+                      <span
+                        style={{
+                          position: 'absolute',
+                          left: '16px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          fontSize: '14px',
+                          color: '#a99bd6',
+                          fontWeight: '600',
+                          pointerEvents: 'none'
+                        }}
+                      >
+                        +91
+                      </span>
+
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        placeholder="Enter mobile number"
+                        value={phone}
+                        onChange={e =>
+                          setPhone(
+                            e.target.value
+                              .replace(/\D/g, '')
+                              .slice(0, 10)
+                          )
+                        }
+                        maxLength={10}
+                        pattern="[6-9][0-9]{9}"
+                        autoComplete="tel-national"
+                        style={{
+                          paddingLeft: '60px',
+                          width: '100%'
+                        }}
+                        required
+                      />
+
+                    </div>
+
+                    <small
+                      style={{
+                        fontSize: '11px',
+                        color: '#999'
+                      }}
+                    >
+                      Used for your account and delivery details.
+                    </small>
+
+                  </label>
+
+                )}
+
+                {/* PASSWORD */}
+
                 {mode !== 'otp' && (
 
                   <label className="field-group">
@@ -422,7 +648,11 @@ export default function Login() {
                             ? 'text'
                             : 'password'
                         }
-                        placeholder="Enter your password"
+                        placeholder={
+                          mode === 'signup'
+                            ? 'Create a strong password'
+                            : 'Enter your password'
+                        }
                         value={password}
                         onChange={e =>
                           setPassword(e.target.value)
@@ -452,6 +682,157 @@ export default function Login() {
 
                     </div>
 
+                    {mode === 'signup' && (
+
+                      <small
+                        style={{
+                          fontSize: '11px',
+                          color: '#999'
+                        }}
+                      >
+                        Minimum 8 characters.
+                      </small>
+
+                    )}
+
+                  </label>
+
+                )}
+
+                {/* CONFIRM PASSWORD */}
+
+                {mode === 'signup' && (
+
+                  <label className="field-group">
+
+                    <span>CONFIRM PASSWORD</span>
+
+                    <div className="password-wrap">
+
+                      <input
+                        type={
+                          showConfirmPassword
+                            ? 'text'
+                            : 'password'
+                        }
+                        placeholder="Re-enter your password"
+                        value={confirmPassword}
+                        onChange={e =>
+                          setConfirmPassword(e.target.value)
+                        }
+                        minLength={8}
+                        autoComplete="new-password"
+                        required
+                      />
+
+                      <button
+                        type="button"
+                        className="password-toggle"
+                        onClick={() =>
+                          setShowConfirmPassword(
+                            !showConfirmPassword
+                          )
+                        }
+                      >
+
+                        {showConfirmPassword
+                          ? 'HIDE'
+                          : 'SHOW'}
+
+                      </button>
+
+                    </div>
+
+                    {confirmPassword && (
+
+                      <small
+                        style={{
+                          fontSize: '12px',
+                          color:
+                            password === confirmPassword
+                              ? '#22c55e'
+                              : '#ef4444'
+                        }}
+                      >
+
+                        {password === confirmPassword
+                          ? '✓ Passwords match'
+                          : 'Passwords do not match'}
+
+                      </small>
+
+                    )}
+
+                  </label>
+
+                )}
+
+                {/* TERMS AND CONDITIONS */}
+
+                {mode === 'signup' && (
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '10px',
+                      fontSize: '12px',
+                      lineHeight: '1.7',
+                      cursor: 'pointer',
+                      margin: '5px 0'
+                    }}
+                  >
+
+                    <input
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={e =>
+                        setTermsAccepted(e.target.checked)
+                      }
+                      style={{
+                        width: '17px',
+                        height: '17px',
+                        marginTop: '3px',
+                        flexShrink: 0,
+                        accentColor: '#9b87f5'
+                      }}
+                      required
+                    />
+
+                    <span>
+
+                      I agree to the{' '}
+
+                      <Link
+                        to="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: '#9b87f5',
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        Terms & Conditions
+                      </Link>
+
+                      {' '}and{' '}
+
+                      <Link
+                        to="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: '#9b87f5',
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        Privacy Policy
+                      </Link>
+
+                      .
+
+                    </span>
+
                   </label>
 
                 )}
@@ -478,7 +859,7 @@ export default function Login() {
                   : stage === 'otp'
                   ? 'VERIFY & CONTINUE'
                   : mode === 'signup'
-                  ? 'CREATE ACCOUNT'
+                  ? 'CREATE ACCOUNT & VERIFY'
                   : 'SEND OTP'}
 
               </span>
@@ -489,11 +870,11 @@ export default function Login() {
 
           </form>
 
+          {/* OTP OPTIONS */}
+
           {stage === 'otp' ? (
 
             <>
-
-              {/* SPAM FOLDER NOTIFICATION */}
 
               <div className="otp-spam-notice">
 
@@ -519,7 +900,7 @@ export default function Login() {
 
               </div>
 
-              {/* RESEND OTP OPTION */}
+              {/* RESEND OTP */}
 
               <div className="auth-switch">
 
@@ -684,7 +1065,9 @@ export default function Login() {
 
         <footer className="auth-footer">
 
-          <span>© 2026 SHOPEASY</span>
+          <span>
+            © {new Date().getFullYear()} SHOPEASY
+          </span>
 
           <span>SECURE BY DESIGN.</span>
 
@@ -693,5 +1076,6 @@ export default function Login() {
       </section>
 
     </main>
+
   );
 }
