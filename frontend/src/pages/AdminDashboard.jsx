@@ -1,5 +1,11 @@
+import {
+  useEffect,
+  useState,
+  useRef,
+  lazy,
+  Suspense
+} from 'react';
 
-import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -26,24 +32,33 @@ const emptyForm = {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
+
+  // Independent administrator session
+  const token = localStorage.getItem('adminToken');
 
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [products, setProducts] = useState([]);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState({ ...emptyForm });
   const [editing, setEditing] = useState(null);
+
   const [image, setImage] = useState(null);
   const [model, setModel] = useState(null);
+
   const [imagePreview, setImagePreview] = useState('');
   const [modelPreview, setModelPreview] = useState('');
+
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
   const imageInput = useRef(null);
   const modelInput = useRef(null);
+  const formPanel = useRef(null);
+  const savingLock = useRef(false);
+
+  // ================= ADMIN AUTHENTICATION =================
 
   useEffect(() => {
     let active = true;
@@ -60,19 +75,39 @@ export default function AdminDashboard() {
         const response = await getAdminProducts(token);
 
         if (active) {
-          setProducts(response.data);
+          setProducts(
+            Array.isArray(response.data)
+              ? response.data
+              : []
+          );
+
           setAuthorized(true);
         }
 
       } catch (err) {
-        if (active) {
-          setError(
-            err.response?.data?.message ||
-            'Unable to access admin dashboard.'
-          );
+        if (!active) return;
+
+        const status = err.response?.status;
+
+        if (status === 401 || status === 403) {
+          localStorage.removeItem('adminToken');
+
+          navigate('/admin', {
+            replace: true
+          });
+
+          return;
         }
+
+        setError(
+          err.response?.data?.message ||
+          'Unable to access admin dashboard.'
+        );
+
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
@@ -81,7 +116,10 @@ export default function AdminDashboard() {
     return () => {
       active = false;
     };
+
   }, [token, navigate]);
+
+  // ================= IMAGE PREVIEW =================
 
   useEffect(() => {
     if (!image) {
@@ -90,10 +128,14 @@ export default function AdminDashboard() {
     }
 
     const url = URL.createObjectURL(image);
+
     setImagePreview(url);
 
     return () => URL.revokeObjectURL(url);
+
   }, [image]);
+
+  // ================= 3D MODEL PREVIEW =================
 
   useEffect(() => {
     if (!model) {
@@ -102,33 +144,81 @@ export default function AdminDashboard() {
     }
 
     const url = URL.createObjectURL(model);
+
     setModelPreview(url);
 
     return () => URL.revokeObjectURL(url);
+
   }, [model]);
+
+  // ================= ADMIN LOGOUT =================
+
+  function logout() {
+    localStorage.removeItem('adminToken');
+
+    navigate('/admin', {
+      replace: true
+    });
+  }
+
+  // ================= ERROR HANDLING =================
+
+  function handleApiError(err, fallback) {
+    const status = err.response?.status;
+
+    if (status === 401 || status === 403) {
+      logout();
+      return;
+    }
+
+    setError(
+      err.response?.data?.message ||
+      fallback
+    );
+  }
+
+  // ================= FORM HANDLING =================
 
   function changeField(e) {
     const { name, value, checked, type } = e.target;
 
     setForm(previous => ({
       ...previous,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox'
+        ? checked
+        : value
     }));
   }
 
+  // ================= FILE VALIDATION =================
+
   function chooseFile(file, type) {
-    if (!file) return;
+    if (!file || savingLock.current) return;
 
     setError('');
 
     if (file.size > 10 * 1024 * 1024) {
       setError('Maximum file size is 10 MB.');
+
+      if (type === 'image' && imageInput.current) {
+        imageInput.current.value = '';
+      }
+
+      if (type === 'model' && modelInput.current) {
+        modelInput.current.value = '';
+      }
+
       return;
     }
 
     if (type === 'image') {
       if (!/\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
         setError('Choose a JPG, PNG or WEBP image.');
+
+        if (imageInput.current) {
+          imageInput.current.value = '';
+        }
+
         return;
       }
 
@@ -138,6 +228,11 @@ export default function AdminDashboard() {
     if (type === 'model') {
       if (!/\.glb$/i.test(file.name)) {
         setError('Choose a valid GLB model.');
+
+        if (modelInput.current) {
+          modelInput.current.value = '';
+        }
+
         return;
       }
 
@@ -145,28 +240,74 @@ export default function AdminDashboard() {
     }
   }
 
+  // ================= REFRESH PRODUCTS =================
+
   async function refreshProducts() {
     const response = await getAdminProducts(token);
-    setProducts(response.data);
+
+    setProducts(
+      Array.isArray(response.data)
+        ? response.data
+        : []
+    );
   }
+
+  // ================= RESET FORM =================
 
   function resetForm() {
     setForm({ ...emptyForm });
     setEditing(null);
     setImage(null);
     setModel(null);
+    setImagePreview('');
+    setModelPreview('');
 
-    if (imageInput.current) imageInput.current.value = '';
-    if (modelInput.current) modelInput.current.value = '';
+    if (imageInput.current) {
+      imageInput.current.value = '';
+    }
+
+    if (modelInput.current) {
+      modelInput.current.value = '';
+    }
   }
+
+  // ================= CREATE / UPDATE PRODUCT =================
 
   async function handleSubmit(e) {
     e.preventDefault();
 
-    if (saving) return;
+    if (savingLock.current) return;
 
     setError('');
     setMessage('');
+
+    if (!form.name.trim()) {
+      setError('Please enter a product name.');
+      return;
+    }
+
+    if (
+      form.price === '' ||
+      !Number.isFinite(Number(form.price)) ||
+      Number(form.price) <= 0
+    ) {
+      setError('Please enter a valid product price above zero.');
+      return;
+    }
+
+    if (
+      form.stock === '' ||
+      !Number.isSafeInteger(Number(form.stock)) ||
+      Number(form.stock) < 0
+    ) {
+      setError('Stock must be a non-negative whole number.');
+      return;
+    }
+
+    if (!form.category.trim()) {
+      setError('Please enter a product category.');
+      return;
+    }
 
     if (!editing && !image) {
       setError('Please upload a product image.');
@@ -174,6 +315,7 @@ export default function AdminDashboard() {
     }
 
     try {
+      savingLock.current = true;
       setSaving(true);
 
       const data = new FormData();
@@ -182,13 +324,26 @@ export default function AdminDashboard() {
         data.append(key, String(value));
       });
 
-      if (image) data.append('image', image);
-      if (model) data.append('model', model);
+      if (image) {
+        data.append('image', image);
+      }
+
+      if (model) {
+        data.append('model', model);
+      }
 
       if (editing) {
-        await updateAdminProduct(editing._id, data, token);
+        await updateAdminProduct(
+          editing._id,
+          data,
+          token
+        );
+
       } else {
-        await createAdminProduct(data, token);
+        await createAdminProduct(
+          data,
+          token
+        );
       }
 
       setMessage(
@@ -201,29 +356,46 @@ export default function AdminDashboard() {
 
       try {
         await refreshProducts();
-      } catch {
-        setError('Product saved, but the list could not refresh.');
+
+      } catch (err) {
+        handleApiError(
+          err,
+          'Product saved, but the list could not refresh.'
+        );
       }
 
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
+      handleApiError(
+        err,
         'Unable to save product.'
       );
+
     } finally {
       setSaving(false);
+      savingLock.current = false;
     }
   }
 
+  // ================= EDIT PRODUCT =================
+
   function editProduct(product) {
+    if (savingLock.current) return;
+
     setEditing(product);
     setImage(null);
     setModel(null);
+    setImagePreview('');
+    setModelPreview('');
     setError('');
     setMessage('');
 
-    if (imageInput.current) imageInput.current.value = '';
-    if (modelInput.current) modelInput.current.value = '';
+    if (imageInput.current) {
+      imageInput.current.value = '';
+    }
+
+    if (modelInput.current) {
+      modelInput.current.value = '';
+    }
 
     setForm({
       name: product.name || '',
@@ -235,156 +407,268 @@ export default function AdminDashboard() {
       isActive: product.isActive !== false
     });
 
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
+    formPanel.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
     });
   }
 
-  async function removeProduct(product) {
-    if (saving) return;
+  // ================= HIDE PRODUCT =================
 
-    if (!window.confirm(`Hide "${product.name}" from the website?`)) {
+  async function removeProduct(product) {
+    if (savingLock.current) return;
+
+    if (
+      !window.confirm(
+        `Hide "${product.name}" from the website?`
+      )
+    ) {
       return;
     }
 
     setError('');
     setMessage('');
     setSaving(true);
+    savingLock.current = true;
 
     try {
-      await deleteAdminProduct(product._id, token);
+      await deleteAdminProduct(
+        product._id,
+        token
+      );
 
-      setMessage('Product removed from storefront.');
+      setMessage(
+        'Product removed from storefront.'
+      );
 
-      if (editing?._id === product._id) resetForm();
+      if (editing?._id === product._id) {
+        resetForm();
+      }
 
       await refreshProducts();
 
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
+      handleApiError(
+        err,
         'Unable to remove product or refresh the list.'
       );
+
     } finally {
       setSaving(false);
+      savingLock.current = false;
     }
   }
 
-  function logout() {
-    localStorage.removeItem('token');
-    navigate('/login', { replace: true });
-  }
+  // ================= LOADING SCREEN =================
 
   if (loading) {
     return (
       <div className="admin-login-page">
-        <h2>Verifying administrator access...</h2>
+
+        <div className="admin-login-card">
+
+          <div className="admin-shield">
+            🛡️
+          </div>
+
+          <h1>ShopEasy Admin</h1>
+
+          <p>
+            Verifying administrator access...
+          </p>
+
+        </div>
+
       </div>
     );
   }
 
+  // ================= ACCESS DENIED =================
+
   if (!authorized) {
     return (
       <div className="admin-login-page">
+
         <div className="admin-login-card">
-          <h1>Access Denied</h1>
-          <p>{error || 'Administrator access required.'}</p>
+
+          <div className="admin-shield">
+            🔒
+          </div>
+
+          <h1>Dashboard Unavailable</h1>
+
+          <p>
+            {error || 'Administrator access required.'}
+          </p>
 
           <button
             className="admin-primary-btn"
-            onClick={() => navigate('/admin')}
+            onClick={logout}
           >
             Return to Admin Login
           </button>
 
           <button
             className="admin-secondary-btn"
-            onClick={logout}
+            onClick={() => window.location.reload()}
           >
-            Sign out
+            Try Again
           </button>
+
         </div>
+
       </div>
     );
   }
 
-  const visibleProducts = products.filter(p =>
-    `${p.name} ${p.category} ${p.brand || ''}`
+  // ================= PRODUCT SEARCH =================
+
+  const visibleProducts = products.filter(product =>
+    `${product.name || ''} ${product.category || ''} ${product.brand || ''}`
       .toLowerCase()
-      .includes(search.toLowerCase())
+      .includes(search.trim().toLowerCase())
   );
 
-  return (
-    <main className="admin-dashboard">
+  const liveProducts = products.filter(
+    product => product.isActive !== false
+  ).length;
 
-      <header className="ad-header">
+  const uploadedModels = products.filter(
+    product => product.modelUrl
+  ).length;
+
+  const totalStock = products.reduce(
+    (sum, product) => sum + Number(product.stock || 0),
+    0
+  );
+
+  // ================= ADMIN DASHBOARD =================
+
+  return (
+    <div className="admin-dashboard">
+
+      {/* DASHBOARD HEADER */}
+
+      <div className="ad-header">
+
         <div>
-          <span className="admin-tag">OWNER CONTROL PANEL</span>
+
+          <span className="admin-tag">
+            OWNER CONTROL PANEL
+          </span>
+
           <h1>ShopEasy Admin</h1>
-          <p>Manage your entire product collection.</p>
+
+          <p>
+            Manage your entire product collection.
+          </p>
+
         </div>
 
         <div className="ad-actions">
-          <button onClick={() => navigate('/products')}>
+
+          <button
+            type="button"
+            onClick={() => navigate('/products')}
+          >
             View Store
           </button>
-          <button onClick={logout}>Logout</button>
-        </div>
-      </header>
 
-      <section className="ad-stats">
+          <button
+            type="button"
+            onClick={logout}
+          >
+            Logout
+          </button>
+
+        </div>
+
+      </div>
+
+      {/* INVENTORY STATISTICS */}
+
+      <div className="ad-stats">
 
         <div className="ad-stat">
+
           <span>Total Products</span>
+
           <h2>{products.length}</h2>
+
         </div>
 
         <div className="ad-stat">
+
           <span>Live Products</span>
-          <h2>
-            {products.filter(p => p.isActive !== false).length}
-          </h2>
+
+          <h2>{liveProducts}</h2>
+
         </div>
 
         <div className="ad-stat">
+
           <span>Uploaded 3D Models</span>
-          <h2>
-            {products.filter(p => p.modelUrl).length}
-          </h2>
+
+          <h2>{uploadedModels}</h2>
+
         </div>
 
         <div className="ad-stat">
+
           <span>Total Stock</span>
-          <h2>
-            {products.reduce((sum, p) => sum + Number(p.stock || 0), 0)}
-          </h2>
+
+          <h2>{totalStock}</h2>
+
         </div>
 
-      </section>
+      </div>
+
+      {/* SUCCESS AND ERROR MESSAGES */}
 
       {message && (
-        <div className="ad-success" role="status">{message}</div>
+        <div
+          className="ad-success"
+          role="status"
+        >
+          {message}
+        </div>
       )}
 
       {error && (
-        <div className="admin-error" role="alert">{error}</div>
+        <div
+          className="admin-error"
+          role="alert"
+        >
+          {error}
+        </div>
       )}
 
-      <section className="ad-panel">
+      {/* PRODUCT CREATION AND EDITING */}
+
+      <div
+        className="ad-panel"
+        ref={formPanel}
+      >
 
         <h2>
-          {editing ? 'Edit Product' : 'Add New Product'}
+          {editing
+            ? 'Edit Product'
+            : 'Add New Product'}
         </h2>
 
         <form onSubmit={handleSubmit}>
 
-          <fieldset disabled={saving} className="ad-fieldset">
+          <fieldset
+            disabled={saving}
+            className="ad-fieldset"
+          >
 
             <div className="ad-form-grid">
 
               <label>
+
                 Product Name
+
                 <input
                   name="name"
                   value={form.name}
@@ -392,33 +676,43 @@ export default function AdminDashboard() {
                   placeholder="Premium Wireless Headphones"
                   required
                 />
+
               </label>
 
               <label>
+
                 Brand
+
                 <input
                   name="brand"
                   value={form.brand}
                   onChange={changeField}
                   placeholder="Brand name"
                 />
+
               </label>
 
               <label>
+
                 Price (INR)
+
                 <input
                   type="number"
                   name="price"
-                  min="0"
+                  min="0.01"
                   step="0.01"
                   value={form.price}
                   onChange={changeField}
+                  placeholder="Enter price"
                   required
                 />
+
               </label>
 
               <label>
+
                 Stock Quantity
+
                 <input
                   type="number"
                   name="stock"
@@ -426,12 +720,16 @@ export default function AdminDashboard() {
                   step="1"
                   value={form.stock}
                   onChange={changeField}
+                  placeholder="Enter stock quantity"
                   required
                 />
+
               </label>
 
               <label>
+
                 Category
+
                 <input
                   name="category"
                   list="admin-categories"
@@ -441,6 +739,7 @@ export default function AdminDashboard() {
                 />
 
                 <datalist id="admin-categories">
+
                   <option value="Tech" />
                   <option value="Footwear" />
                   <option value="Accessories" />
@@ -448,21 +747,28 @@ export default function AdminDashboard() {
                   <option value="Home" />
                   <option value="Fitness" />
                   <option value="General" />
+
                 </datalist>
+
               </label>
 
               <label className="ad-checkbox">
+
                 <input
                   type="checkbox"
                   name="isActive"
                   checked={form.isActive}
                   onChange={changeField}
                 />
+
                 Publish on live website
+
               </label>
 
               <label className="ad-full">
+
                 Product Description
+
                 <textarea
                   name="description"
                   rows="5"
@@ -470,82 +776,172 @@ export default function AdminDashboard() {
                   onChange={changeField}
                   placeholder="Enter product features and specifications..."
                 />
+
               </label>
 
             </div>
 
+            {/* IMAGE AND 3D MODEL UPLOAD */}
+
             <div className="ad-upload-grid">
+
+              {/* IMAGE UPLOAD */}
 
               <div
                 className="ad-upload"
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => {
                   e.preventDefault();
-                  if (!saving) chooseFile(e.dataTransfer.files[0], 'image');
+
+                  if (!saving) {
+                    chooseFile(
+                      e.dataTransfer.files[0],
+                      'image'
+                    );
+                  }
                 }}
               >
+
                 <h3>Product Image</h3>
 
                 {(imagePreview || editing?.image) && (
+
                   <img
                     className="ad-preview-image"
-                    src={imagePreview || editing.image}
+                    src={imagePreview || editing?.image}
                     alt="Product preview"
                   />
+
                 )}
 
-                <p>Drag and drop or choose an image</p>
+                <p>
+                  Drag and drop or choose an image
+                </p>
 
                 <input
                   ref={imageInput}
                   type="file"
                   accept=".jpg,.jpeg,.png,.webp"
-                  onChange={e => chooseFile(e.target.files[0], 'image')}
+                  onChange={e =>
+                    chooseFile(
+                      e.target.files[0],
+                      'image'
+                    )
+                  }
                 />
 
-                <small>JPG, PNG, WEBP — Max 10 MB</small>
+                <small>
+                  JPG, PNG, WEBP — Max 10 MB
+                </small>
+
+                {image && (
+                  <small>
+                    Selected: {image.name}
+                  </small>
+                )}
+
               </div>
+
+              {/* 3D MODEL UPLOAD */}
 
               <div
                 className="ad-upload"
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => {
                   e.preventDefault();
-                  if (!saving) chooseFile(e.dataTransfer.files[0], 'model');
+
+                  if (!saving) {
+                    chooseFile(
+                      e.dataTransfer.files[0],
+                      'model'
+                    );
+                  }
                 }}
               >
+
                 <h3>3D Product Model</h3>
 
                 {(modelPreview || editing?.modelUrl) && (
-                  <Suspense fallback={<p>Loading 3D preview...</p>}>
-                    <ProductViewer
-                      key={modelPreview || editing?.modelUrl}
-                      image={imagePreview || editing?.image}
-                      model3d={modelPreview || editing?.modelUrl}
-                      name={form.name || 'Product preview'}
-                    />
-                  </Suspense>
+
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      height: '320px',
+                      overflow: 'hidden',
+                      borderRadius: '12px'
+                    }}
+                  >
+
+                    <Suspense
+                      fallback={
+                        <p>Loading 3D preview...</p>
+                      }
+                    >
+
+                      <ProductViewer
+                        key={
+                          modelPreview ||
+                          editing?.modelUrl
+                        }
+                        image={
+                          imagePreview ||
+                          editing?.image
+                        }
+                        model3d={
+                          modelPreview ||
+                          editing?.modelUrl
+                        }
+                        name={
+                          form.name ||
+                          'Product preview'
+                        }
+                      />
+
+                    </Suspense>
+
+                  </div>
+
                 )}
 
-                <p>Drag and drop or choose a GLB file</p>
+                <p>
+                  Drag and drop or choose a GLB file
+                </p>
 
                 <input
                   ref={modelInput}
                   type="file"
                   accept=".glb"
-                  onChange={e => chooseFile(e.target.files[0], 'model')}
+                  onChange={e =>
+                    chooseFile(
+                      e.target.files[0],
+                      'model'
+                    )
+                  }
                 />
 
-                <small>GLB format — Max 10 MB</small>
+                <small>
+                  GLB format — Max 10 MB
+                </small>
+
+                {model && (
+                  <small>
+                    Selected: {model.name}
+                  </small>
+                )}
+
               </div>
 
             </div>
+
+            {/* SAVE PRODUCT BUTTON */}
 
             <button
               type="submit"
               className="admin-primary-btn"
               disabled={saving}
             >
+
               {saving
                 ? 'Saving product... Please wait'
                 : editing
@@ -553,41 +949,53 @@ export default function AdminDashboard() {
                   : form.isActive
                     ? '+ Publish Product'
                     : '+ Save Hidden Product'}
+
             </button>
 
             {editing && (
+
               <button
                 type="button"
                 className="admin-secondary-btn"
                 onClick={resetForm}
+                disabled={saving}
               >
                 Cancel Editing
               </button>
+
             )}
 
           </fieldset>
 
         </form>
 
-      </section>
+      </div>
 
-      <section className="ad-panel">
+      {/* MANAGE PRODUCTS */}
+
+      <div className="ad-panel">
 
         <div className="ad-list-header">
+
           <h2>Manage Products</h2>
 
           <input
+            type="search"
             placeholder="Search products..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+
         </div>
 
         <div className="ad-table-wrap">
+
           <table className="ad-table">
 
             <thead>
+
               <tr>
+
                 <th>Product</th>
                 <th>Category</th>
                 <th>Price</th>
@@ -595,83 +1003,138 @@ export default function AdminDashboard() {
                 <th>3D Model</th>
                 <th>Status</th>
                 <th>Actions</th>
+
               </tr>
+
             </thead>
 
             <tbody>
 
               {visibleProducts.map(product => (
+
                 <tr key={product._id}>
 
                   <td>
+
                     <div className="ad-product">
+
                       {product.image && (
-                        <img src={product.image} alt="" />
+
+                        <img
+                          src={product.image}
+                          alt={product.name || 'Product'}
+                          loading="lazy"
+                        />
+
                       )}
-                      <span>{product.name}</span>
+
+                      <span>
+                        {product.name}
+                      </span>
+
                     </div>
-                  </td>
 
-                  <td>{product.category}</td>
-
-                  <td>
-                    ₹{Number(product.price).toLocaleString('en-IN')}
-                  </td>
-
-                  <td>{product.stock}</td>
-
-                  <td>
-                    {product.modelUrl ? 'Available' : 'Not uploaded'}
                   </td>
 
                   <td>
-                    <span className={
-                      product.isActive !== false
-                        ? 'ad-live'
-                        : 'ad-hidden'
-                    }>
-                      {product.isActive !== false ? 'Live' : 'Hidden'}
+                    {product.category || 'General'}
+                  </td>
+
+                  <td>
+
+                    ₹{Number(
+                      product.price || 0
+                    ).toLocaleString('en-IN')}
+
+                  </td>
+
+                  <td>
+                    {product.stock ?? 0}
+                  </td>
+
+                  <td>
+
+                    {product.modelUrl
+                      ? 'Available'
+                      : 'Not uploaded'}
+
+                  </td>
+
+                  <td>
+
+                    <span
+                      className={
+                        product.isActive !== false
+                          ? 'ad-live'
+                          : 'ad-hidden'
+                      }
+                    >
+
+                      {product.isActive !== false
+                        ? 'Live'
+                        : 'Hidden'}
+
                     </span>
+
                   </td>
 
                   <td>
+
                     <div className="ad-row-actions">
 
                       <button
+                        type="button"
                         disabled={saving}
-                        onClick={() => editProduct(product)}
+                        onClick={() =>
+                          editProduct(product)
+                        }
                       >
                         Edit
                       </button>
 
                       {product.isActive !== false && (
+
                         <button
+                          type="button"
                           className="ad-delete"
                           disabled={saving}
-                          onClick={() => removeProduct(product)}
+                          onClick={() =>
+                            removeProduct(product)
+                          }
                         >
                           Hide
                         </button>
+
                       )}
 
                     </div>
+
                   </td>
 
                 </tr>
+
               ))}
 
               {!visibleProducts.length && (
+
                 <tr>
-                  <td colSpan="7">No products found.</td>
+
+                  <td colSpan="7">
+                    No products found.
+                  </td>
+
                 </tr>
+
               )}
 
             </tbody>
+
           </table>
+
         </div>
 
-      </section>
+      </div>
 
-    </main>
+    </div>
   );
 }
