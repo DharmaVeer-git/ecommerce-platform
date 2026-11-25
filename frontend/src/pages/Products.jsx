@@ -1,12 +1,31 @@
+import {
+  useEffect,
+  useState,
+  lazy,
+  Suspense,
+  useRef
+} from 'react';
 
-import { useEffect, useState, lazy, Suspense, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { getProducts, addToCart } from '../api';
+import {
+  Link,
+  useNavigate
+} from 'react-router-dom';
+
+import {
+  getProducts,
+  addToCart
+} from '../api';
+
+import VoiceSearch from '../components/VoiceSearch';
+
 import './Products3D.css';
 
 const ProductViewer = lazy(() => import('./ProductViewer'));
 
-// Existing local 3D models
+// ==========================================
+// EXISTING LOCAL 3D MODELS
+// ==========================================
+
 const models = [
   ['headphone', 'over-ear-headphones.glb'],
   ['watch', 'smartwatch.glb'],
@@ -16,7 +35,10 @@ const models = [
   ['backpack', 'hiking-backpack.glb']
 ];
 
-// Support Cloudinary and existing local 3D models
+// ==========================================
+// SUPPORT CLOUDINARY AND LOCAL 3D MODELS
+// ==========================================
+
 const model = p => {
   if (p.modelUrl) return p.modelUrl;
 
@@ -29,7 +51,10 @@ const model = p => {
   return match ? `/models/${match[1]}` : '';
 };
 
-// Dynamic product categories
+// ==========================================
+// DYNAMIC PRODUCT CATEGORIES
+// ==========================================
+
 const category = p => {
   if (p.category && p.category !== 'General') {
     return p.category;
@@ -42,13 +67,96 @@ const category = p => {
       : 'Accessories';
 };
 
-// Format product price
+// ==========================================
+// FORMAT PRODUCT PRICE
+// ==========================================
+
 const money = p =>
   p.price != null && Number.isFinite(Number(p.price))
     ? `₹${Number(p.price).toLocaleString('en-IN')}`
     : 'Price unavailable';
 
-// Product image
+// ==========================================
+// SMART SEARCH NORMALIZATION
+// ==========================================
+
+const normalize = text =>
+  String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const stopWords = new Set([
+  'i',
+  'want',
+  'to',
+  'buy',
+  'show',
+  'me',
+  'find',
+  'search',
+  'for',
+  'please',
+  'a',
+  'an',
+  'the',
+  'some',
+  'looking',
+  'am',
+  'need',
+  'can',
+  'you',
+  'get',
+  'would',
+  'like',
+  'purchase',
+  'could',
+  'my'
+]);
+
+const searchAliases = {
+  earphones: 'headphones',
+  headset: 'headphones',
+  headsets: 'headphones',
+  sneakers: 'shoes',
+  spectacles: 'sunglasses',
+  rucksack: 'backpack',
+  rucksacks: 'backpack'
+};
+
+function matchesProduct(p, query) {
+  const searchWords = normalize(query)
+    .split(/\s+/)
+    .filter(word => word && !stopWords.has(word))
+    .map(word => searchAliases[word] || word);
+
+  const searchableText = normalize(
+    `${p.name || ''}
+     ${p.description || ''}
+     ${p.brand || ''}
+     ${category(p)}`
+  );
+
+  const compactText = searchableText.replace(/\s/g, '');
+
+  return searchWords.every(word => {
+    const singular =
+      word.length > 3
+        ? word.replace(/s$/, '')
+        : word;
+
+    return (
+      compactText.includes(word) ||
+      compactText.includes(singular)
+    );
+  });
+}
+
+// ==========================================
+// PRODUCT IMAGE
+// ==========================================
+
 function Photo({ p, eager = false }) {
   const [failed, setFailed] = useState(false);
 
@@ -70,7 +178,10 @@ function Photo({ p, eager = false }) {
   );
 }
 
-// Product details and interactive 3D viewer
+// ==========================================
+// PRODUCT DETAILS AND INTERACTIVE 3D VIEWER
+// ==========================================
+
 function Details({ p, close, add, busy }) {
   const dialog = useRef(null);
 
@@ -91,7 +202,9 @@ function Details({ p, close, add, busy }) {
         close();
       }}
       onClick={e => {
-        if (e.target === dialog.current) close();
+        if (e.target === dialog.current) {
+          close();
+        }
       }}
     >
       <div className="se-detail">
@@ -107,7 +220,9 @@ function Details({ p, close, add, busy }) {
         <div className="se-view">
 
           <Suspense
-            fallback={<p>Loading interactive viewer…</p>}
+            fallback={
+              <p>Loading interactive viewer…</p>
+            }
           >
             <ProductViewer
               image={p.image}
@@ -156,15 +271,20 @@ function Details({ p, close, add, busy }) {
   );
 }
 
-// Main products page
+// ==========================================
+// MAIN PRODUCTS PAGE
+// ==========================================
+
 export default function Products() {
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [sort, setSort] = useState('featured');
+
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -173,7 +293,36 @@ export default function Products() {
   const navigate = useNavigate();
   const lock = useRef(false);
 
-  // Fetch products from backend
+  // ========================================
+  // TEXT AND VOICE SEARCH HANDLER
+  // ========================================
+
+  function handleSearch(text) {
+    setQuery(String(text || '').trim());
+    setFilter('All');
+
+    document
+      .getElementById('collection')
+      ?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+  }
+
+  function handleQueryChange(text) {
+    setQuery(text);
+    setFilter('All');
+  }
+
+  function clearSearch() {
+    setQuery('');
+    setFilter('All');
+  }
+
+  // ========================================
+  // FETCH PRODUCTS FROM BACKEND
+  // ========================================
+
   useEffect(() => {
     let active = true;
 
@@ -221,7 +370,10 @@ export default function Products() {
 
   }, [retry]);
 
-  // Automatically dismiss notification
+  // ========================================
+  // AUTOMATICALLY DISMISS NOTIFICATIONS
+  // ========================================
+
   useEffect(() => {
     if (!notice) return;
 
@@ -234,7 +386,10 @@ export default function Products() {
 
   }, [notice]);
 
-  // Add product to shopping cart
+  // ========================================
+  // ADD PRODUCT TO SHOPPING CART
+  // ========================================
+
   async function add(p) {
 
     const token = localStorage.getItem('token');
@@ -285,16 +440,25 @@ export default function Products() {
     }
   }
 
-  // Automatically generate categories
+  // ========================================
+  // AUTOMATICALLY GENERATE CATEGORIES
+  // ========================================
+
   const categories = [
     'All',
     ...new Set(
-      products.map(category).filter(c => c !== 'All')
+      products
+        .map(category)
+        .filter(c => c !== 'All')
     )
   ];
 
-  // Reset filter if a category no longer exists
+  // ========================================
+  // RESET INVALID CATEGORY FILTER
+  // ========================================
+
   useEffect(() => {
+
     if (
       !loading &&
       filter !== 'All' &&
@@ -302,16 +466,26 @@ export default function Products() {
     ) {
       setFilter('All');
     }
+
   }, [products, filter, loading]);
 
-  // Search, filter and sort products
+  // ========================================
+  // SMART SEARCH, FILTER AND SORT
+  // ========================================
+
   const visible = products
-    .filter(p =>
-      (filter === 'All' || category(p) === filter) &&
-      `${p.name} ${p.description || ''} ${p.brand || ''} ${category(p)}`
-        .toLowerCase()
-        .includes(query.toLowerCase().trim())
-    )
+    .filter(p => {
+
+      const matchesCategory =
+        filter === 'All' ||
+        category(p) === filter;
+
+      const matchesSearch =
+        matchesProduct(p, query);
+
+      return matchesCategory && matchesSearch;
+
+    })
     .sort((a, b) =>
       sort === 'low'
         ? Number(a.price) - Number(b.price)
@@ -321,13 +495,26 @@ export default function Products() {
     );
 
   const featured =
-    products.find(p => /headphone/i.test(p.name)) ||
-    products[0];
+    products.find(p =>
+      /headphone/i.test(p.name)
+    ) || products[0];
+
+  // ========================================
+  // USER INTERFACE
+  // ========================================
 
   return (
     <main className="se-store">
 
       <div className="se-shell">
+
+        {/* VOICE ENABLED SMART SEARCH */}
+
+        <VoiceSearch
+          query={query}
+          setQuery={handleQueryChange}
+          onSearch={handleSearch}
+        />
 
         {/* HERO SECTION */}
 
@@ -411,22 +598,77 @@ export default function Products() {
             <div>
 
               <span className="se-kicker">
-                THE EDIT
+                {query.trim()
+                  ? 'SEARCH RESULTS'
+                  : 'THE EDIT'}
               </span>
 
               <h2>
-                Find your next favourite.
+                {query.trim()
+                  ? 'Find your matching products.'
+                  : 'Find your next favourite.'}
               </h2>
 
             </div>
 
             <span>
-              {visible.length} products
+              {visible.length}{' '}
+              {visible.length === 1
+                ? 'product'
+                : 'products'}
             </span>
 
           </div>
 
-          {/* SEARCH AND FILTERS */}
+          {/* ACTIVE SEARCH INFORMATION */}
+
+          {query.trim() && (
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                marginBottom: '20px',
+                padding: '15px 18px',
+                border: '1px solid #514478',
+                borderRadius: '12px',
+                background: '#181e2e'
+              }}
+            >
+
+              <span
+                style={{
+                  color: '#c1afff',
+                  fontSize: '14px',
+                  overflowWrap: 'anywhere',
+                  minWidth: 0
+                }}
+              >
+                Showing results for: "{query}"
+              </span>
+
+              <button
+                type="button"
+                onClick={clearSearch}
+                style={{
+                  background: '#33274e',
+                  color: '#e4dcff',
+                  border: '1px solid #7466a7',
+                  borderRadius: '8px',
+                  padding: '8px 14px'
+                }}
+              >
+                Clear search ×
+              </button>
+
+            </div>
+
+          )}
+
+          {/* CATEGORY FILTERS AND SORTING */}
 
           <div className="se-tools">
 
@@ -445,13 +687,6 @@ export default function Products() {
               ))}
 
             </div>
-
-            <input
-              aria-label="Search products"
-              placeholder="Search products…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
 
             <select
               aria-label="Sort products"
@@ -492,6 +727,8 @@ export default function Products() {
 
           ) : error ? (
 
+            /* ERROR STATE */
+
             <div className="se-empty">
 
               {error}
@@ -506,22 +743,41 @@ export default function Products() {
 
           ) : !visible.length ? (
 
+            /* NO MATCHING PRODUCTS */
+
             <div className="se-empty">
 
-              No matching products.
+              <h2>No matching products</h2>
 
-              <button
-                onClick={() => {
-                  setQuery('');
-                  setFilter('All');
+              <p
+                style={{
+                  color: '#a7afc2',
+                  marginTop: '12px'
                 }}
               >
+                {query.trim()
+                  ? `We couldn't find products matching "${query}".`
+                  : 'No products are available in this category.'}
+              </p>
+
+              <p
+                style={{
+                  color: '#a7afc2',
+                  marginTop: '8px'
+                }}
+              >
+                Try another product name or use voice search again.
+              </p>
+
+              <button onClick={clearSearch}>
                 Clear filters
               </button>
 
             </div>
 
           ) : (
+
+            /* PRODUCT GRID */
 
             <div className="se-grid">
 
@@ -644,4 +900,3 @@ export default function Products() {
     </main>
   );
 }
-
