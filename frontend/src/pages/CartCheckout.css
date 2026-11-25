@@ -456,3 +456,68 @@
     transition: none;
   }
 }
+
+/* ================= CHECKOUT REFUND NOTICE ================= */
+
+.sx-refund-notice {
+  padding: 16px 20px;
+  margin-bottom: 22px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.08);
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* ================= CHECKOUT REFUND BOX ================= */
+
+.sx-refund-box {
+  padding: 16px;
+  margin: 20px 0;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.07);
+}
+
+.sx-refund-box.success {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.07);
+}
+
+.sx-refund-box h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.sx-refund-box.success h3 {
+  color: #22c55e;
+}
+
+.sx-refund-box p {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sx-refund-box small {
+  display: block;
+  margin-top: 12px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+@media (max-width: 600px) {
+
+  .sx-refund-notice {
+    padding: 12px 15px;
+    font-size: 13px;
+  }
+
+  .sx-refund-box {
+    padding: 12px;
+  }
+
+}

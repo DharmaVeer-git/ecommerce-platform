@@ -196,3 +196,48 @@ export const sendAIMessage = (message, token) =>
       timeout: 120000
     }
   );
+  export const createRazorpayOrder = (token, expectedAmount) =>
+  axios.post(
+    `${CORE_URL}/orders/create-payment`,
+    { expectedAmount },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  );
+
+export const verifyRazorpayPayment = (token, paymentData) =>
+  axios.post(
+    `${CORE_URL}/orders/verify-payment`,
+    paymentData,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  );
+  // ================= PAYMENT STATUS =================
+
+export const getPaymentStatus = (token, orderId) =>
+  axios.get(
+    `${CORE_URL}/orders/payment-status/${orderId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      timeout: 30000
+    }
+  );
+  // ================= ACTIVE CHECKOUT =================
+
+export const getActiveCheckout = (token) =>
+  axios.get(
+    `${CORE_URL}/orders/active-checkout`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      timeout: 30000
+    }
+  );

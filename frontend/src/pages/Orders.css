@@ -505,3 +505,194 @@
   }
 
 }
+/* ================= RAZORPAY PAYMENT STYLES ================= */
+
+.so-stat .so-success-text,
+.so-success-text {
+  color: #34d399;
+}
+
+.so-payment-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 26px;
+  background: #ffffff03;
+  border-bottom: 1px solid #ffffff0c;
+  font-size: 12px;
+  color: #c1afff;
+  font-weight: 600;
+}
+
+.so-payment-mode {
+  background: #c1afff12;
+  color: #c1afff;
+  border: 1px solid #c1afff25;
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.so-status.success {
+  background: #22c55e15;
+  color: #86efac;
+  border: 1px solid #22c55e30;
+}
+
+/* Prevent navigation bar overlap */
+
+.so-page {
+  padding-top: 120px;
+}
+
+@media (max-width: 800px) {
+  .so-page {
+    padding-top: 110px;
+  }
+
+  .so-payment-strip {
+    padding: 12px 18px;
+  }
+}
+
+@media (max-width: 500px) {
+  .so-payment-strip {
+    gap: 8px;
+    font-size: 11px;
+  }
+}
+
+/* ================= REFUND PANEL ================= */
+
+.so-refund-panel {
+  margin: 16px 20px;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.so-refund-panel.success {
+  background: rgba(34, 197, 94, 0.07);
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.so-refund-panel.pending {
+  background: rgba(245, 158, 11, 0.07);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.so-refund-panel.failed {
+  background: rgba(239, 68, 68, 0.07);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.so-refund-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.so-refund-heading h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.so-refund-panel p {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 10px 0;
+  opacity: 0.85;
+}
+
+.so-refund-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.so-refund-value {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 128, 128, 0.18);
+  background: rgba(128, 128, 128, 0.06);
+}
+
+.so-refund-value small {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.so-refund-value strong {
+  font-size: 20px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.so-refund-date {
+  display: block;
+  margin-top: 16px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.so-refund-panel .so-demo-note {
+  margin-top: 15px;
+}
+
+.so-status.success {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.so-status.pending {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.so-status.failed {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.so-toolbar {
+  flex-wrap: wrap;
+}
+
+.so-payment-strip {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+
+  .so-refund-panel {
+    margin: 12px;
+    padding: 15px;
+  }
+
+  .so-refund-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .so-refund-value {
+    padding: 12px;
+  }
+
+  .so-refund-value strong {
+    font-size: 18px;
+  }
+
+  .so-refund-heading {
+    align-items: flex-start;
+  }
+
+}
