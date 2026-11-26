@@ -267,8 +267,7 @@ exports.getPaymentStatus = async (req, res) => {
     // ================= FETCH PAYMENT ATTEMPTS =================
 
     const result = await razorpay.orders.fetchPayments(
-      order.razorpayOrderId,
-      { count: 100 }
+      order.razorpayOrderId
     );
 
     if (!Array.isArray(result?.items)) {
